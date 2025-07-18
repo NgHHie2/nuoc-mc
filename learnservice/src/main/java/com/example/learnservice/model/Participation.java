@@ -16,14 +16,14 @@ import lombok.Data;
 
 @Entity
 @Data
-public class Participation{
+public class Participation {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @Embedded
     @AttributeOverrides({
-        @AttributeOverride(name = "id", column = @Column(name = "account_id"))
+            @AttributeOverride(name = "id", column = @Column(name = "account_id"))
     })
     private Account account;
 

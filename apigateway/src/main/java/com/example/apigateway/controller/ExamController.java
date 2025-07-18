@@ -37,7 +37,7 @@ public class ExamController {
                 .retrieve()
                 .bodyToMono(Subject.class)
                 .doOnError(ex -> System.out.println("Error calling learnservice: " + ex.getMessage()))
-                .onErrorReturn(new Subject()); 
+                .onErrorReturn(new Subject());
 
         Mono<Map<String, Object>> resultMono = subjectMono.flatMap(subject -> {
             if (subject.getParticipations() == null || subject.getParticipations().isEmpty()) {
@@ -59,7 +59,8 @@ public class ExamController {
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(accountIds)
                     .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<List<Account>>() {})
+                    .bodyToMono(new ParameterizedTypeReference<List<Account>>() {
+                    })
                     .map(accounts -> {
                         Map<String, Object> response = new HashMap<>();
                         response.put("success", true);

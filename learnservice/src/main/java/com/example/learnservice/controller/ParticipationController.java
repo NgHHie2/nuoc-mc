@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.learnservice.client.AccountClient;
+import com.example.learnservice.dto.ParticipationDTO;
 import com.example.learnservice.model.Account;
 import com.example.learnservice.model.Participation;
 import com.example.learnservice.service.ParticipationService;
@@ -24,7 +25,7 @@ public class ParticipationController {
 
     @Autowired
     private AccountClient accountClient;
- 
+
     @GetMapping("/account/{accountId}")
     public ResponseEntity<?> getParticipationByAccount(@PathVariable int accountId) {
         Account account = Account.builder().id(accountId).build();
@@ -34,9 +35,8 @@ public class ParticipationController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Account không tồn tại");
         }
 
-        List<Participation> participations = participationService.getParticipationByAccount(account);
+        List<ParticipationDTO> participations = participationService.getParticipationByAccount(account);
         return ResponseEntity.ok(participations);
     }
-
 
 }

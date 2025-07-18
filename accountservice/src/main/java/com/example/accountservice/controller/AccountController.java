@@ -61,14 +61,14 @@ public class AccountController {
     @DeleteMapping("/{id}")
     public String deleteAccount(@PathVariable int id) {
         Optional<Account> account = accountService.getAccountById(id);
-        
+
         if (account.isPresent()) {
             accountService.deleteAccount(id);
             kafkaProducer.sendAccount("account-deleted", account.get());
             return "Tài khoản đã được xóa thành công!";
-        } 
-        
+        }
+
         return "Không tìm thấy tài khoản!";
-        
+
     }
 }
