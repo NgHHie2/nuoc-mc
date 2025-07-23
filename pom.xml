@@ -69,7 +69,7 @@
 	</build>
 
 
-		<distributionManagement>
+		<!-- <distributionManagement>
 		<repository>
 			<id>nexus-releases</id>
 			<name>Nexus Release Repository</name>
@@ -80,6 +80,6 @@
 			<name>Nexus Snapshot Repository</name>
 			<url>http://127.0.0.1:8081/repository/maven-snapshots/</url>
 		</snapshotRepository>
-	</distributionManagement>
+	</distributionManagement> -->
 
 </project>

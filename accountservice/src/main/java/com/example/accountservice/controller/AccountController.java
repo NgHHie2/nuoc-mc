@@ -18,7 +18,9 @@ import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
 
 import jakarta.transaction.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RestController
 @Transactional
 @RequestMapping("/account")
@@ -37,6 +39,7 @@ public class AccountController {
 
     @GetMapping("/{id}")
     public Optional<Account> getAccountById(@PathVariable int id) {
+        log.info("get user by id: " + id);
         return accountService.getAccountById(id);
     }
 
