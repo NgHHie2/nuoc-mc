@@ -1,0 +1,42 @@
+version: "3.8"
+services:
+  stats-service:
+    build: .
+    container_name: stats-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - EUREKA_SERVER_HOST=localhost
+      - DB_HOST=postgres-stats
+      - DB_NAME=statsservicedb
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=1111
+      - KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+    depends_on:
+      - postgres-stats
+    networks:
+      - stats-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  postgres-stats:
+    image: postgres:15
+    container_name: postgres-stats
+    ports:
+      - "5435:5432" # Avoid conflict with other postgres instances
+    environment:
+      POSTGRES_DB: statsservicedb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1111
+    volumes:
+      - postgres_stats_data:/var/lib/postgresql/data
+    networks:
+      - stats-network
+
+volumes:
+  postgres_stats_data:
+
+networks:
+  stats-network:
+    driver: bridge

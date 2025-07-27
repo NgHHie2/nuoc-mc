@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  api-gateway:
+    build: .
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - EUREKA_SERVER_HOST=eureka-server
+    depends_on:
+      - eureka-server
+    networks:
+      - microservice-network
+
+  eureka-server:
+    image: eureka-server:latest
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    networks:
+      - microservice-network
+
+networks:
+  microservice-network:
+    driver: bridge
