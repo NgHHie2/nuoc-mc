@@ -2,10 +2,7 @@
 
 echo "🛑 Stopping development environment..."
 
-# Stop individual databases
-docker stop postgres-account-dev postgres-learn-dev postgres-stats-dev 2>/dev/null
-
-# Stop infrastructure
+# Stop infrastructure (including all databases)
 cd infrastructure
 docker-compose down
 cd ..

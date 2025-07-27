@@ -38,6 +38,51 @@ services:
     networks:
       - microservice-network
 
+  # Account Service Database
+  postgres-account:
+    image: postgres:15
+    container_name: postgres-account-dev
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: accountservicedb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1111
+    volumes:
+      - postgres_account_data:/var/lib/postgresql/data
+    networks:
+      - microservice-network
+
+  # Learn Service Database
+  postgres-learn:
+    image: postgres:15
+    container_name: postgres-learn-dev
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: learnservicedb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1111
+    volumes:
+      - postgres_learn_data:/var/lib/postgresql/data
+    networks:
+      - microservice-network
+
+  # Stats Service Database
+  postgres-stats:
+    image: postgres:15
+    container_name: postgres-stats-dev
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_DB: statsservicedb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1111
+    volumes:
+      - postgres_stats_data:/var/lib/postgresql/data
+    networks:
+      - microservice-network
+
   # PgAdmin for database management
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -54,6 +99,9 @@ services:
 
 volumes:
   kafka_shared_data:
+  postgres_account_data:
+  postgres_learn_data:
+  postgres_stats_data:
   pgadmin_data:
 
 networks:

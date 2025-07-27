@@ -6,37 +6,19 @@ services:
     ports:
       - "8082:8082"
     environment:
-      - SPRING_PROFILES_ACTIVE=dev
-      - EUREKA_SERVER_HOST=localhost
-      - DB_HOST=postgres-account
+      - SPRING_PROFILES_ACTIVE=prod
+      - EUREKA_SERVER_HOST=eureka-server
+      - DB_HOST=postgres-account-dev
       - DB_NAME=accountservicedb
       - DB_USERNAME=postgres
       - DB_PASSWORD=1111
-      - KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-shared:9092
     depends_on:
-      - postgres-account
+      - eureka-server
     networks:
-      - account-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  postgres-account:
-    image: postgres:15
-    container_name: postgres-account
-    ports:
-      - "5433:5432" # Avoid conflict with other postgres instances
-    environment:
-      POSTGRES_DB: accountservicedb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1111
-    volumes:
-      - postgres_account_data:/var/lib/postgresql/data
-    networks:
-      - account-network
-
-volumes:
-  postgres_account_data:
+      - microservice-network
 
 networks:
-  account-network:
-    driver: bridge
+  microservice-network:
+    external: true
+    name: microservice-network
