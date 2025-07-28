@@ -6,7 +6,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_PROFILES_ACTIVE=dev
       - EUREKA_SERVER_HOST=eureka-server
     networks:
       - microservice-network

@@ -13,8 +13,6 @@ services:
       - DB_USERNAME=postgres
       - DB_PASSWORD=1111
       - KAFKA_BOOTSTRAP_SERVERS=kafka-shared:9092
-    depends_on:
-      - eureka-server
     networks:
       - microservice-network
 
