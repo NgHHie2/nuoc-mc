@@ -1,12 +1,12 @@
 version: "3.8"
 services:
   account-service:
-    build: .
+    image: account-service:latest 
     container_name: account-service
     ports:
       - "8082:8082"
     environment:
-      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_PROFILES_ACTIVE=staging
       - EUREKA_SERVER_HOST=eureka-server
       - DB_HOST=postgres-account-dev
       - DB_NAME=accountservicedb

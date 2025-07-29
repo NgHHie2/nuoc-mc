@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   learn-service:
-    build: .
+    image: learn-service:latest 
     container_name: learn-service
     ports:
       - "8084:8084"

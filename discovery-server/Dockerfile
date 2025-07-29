@@ -1,4 +1,4 @@
-FROM openjdk:21-jdk-slim
+FROM amazoncorretto:21-alpine
 
 WORKDIR /app
 COPY target/eureka-server-*.jar app.jar
