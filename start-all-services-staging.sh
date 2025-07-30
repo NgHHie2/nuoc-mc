@@ -15,4 +15,4 @@ cd stats-service
 docker compose -f docker-compose.staging.yml up -d
 cd ..
 
-echo "All services run successfully!"
+echo "All services run successfully!"S
