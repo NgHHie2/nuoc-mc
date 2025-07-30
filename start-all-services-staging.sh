@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# Run API Gateway container
-cd api-gateway
-docker compose -f docker-compose.staging.yml up -d
-cd ..
-
 # Run Account Service container
 cd account-service
 docker compose -f docker-compose.staging.yml up -d

@@ -12,6 +12,19 @@ services:
     networks:
       - microservice-network
 
+  api-gateway:
+    image: api-gateway:latest 
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=staging
+      - EUREKA_SERVER_HOST=eureka-server
+    depends_on:
+      - eureka-server
+    networks:
+      - microservice-network
+
   # Shared Kafka
   kafka:
     image: confluentinc/cp-kafka:7.6.0
