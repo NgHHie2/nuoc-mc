@@ -1,0 +1,53 @@
+version: "3.8"
+services:
+  eureka-server:
+    image: eureka-server:latest
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - EUREKA_HOSTNAME=eureka-server
+    networks:
+      - microservice-network
+
+  # Account Service Database
+  postgres-account:
+    image: postgres:15
+    container_name: postgres-account-dev
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: accountservicedb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1111
+    volumes:
+      - postgres_account_data:/var/lib/postgresql/data
+    networks:
+      - microservice-network
+
+  # PgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - microservice-network
+
+volumes:
+  kafka_shared_data:
+  postgres_account_data:
+  postgres_learn_data:
+  postgres_stats_data:
+  pgadmin_data:
+
+networks:
+  microservice-network:
+    driver: bridge
+    name: microservice-network
