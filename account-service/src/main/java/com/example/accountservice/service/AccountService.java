@@ -25,7 +25,7 @@ public class AccountService {
 
     public Account saveAccount(Account Account) {
         return accountRepository.save(Account);
-    } 
+    }
 
     public void deleteAccount(int id) {
         accountRepository.deleteById(id);
@@ -33,5 +33,22 @@ public class AccountService {
 
     public List<Account> getAccountsByIds(List<Integer> ids) {
         return accountRepository.findAllById(ids);
+    }
+
+    // Methods for authentication
+    public Optional<Account> findByUsername(String username) {
+        return accountRepository.findByUsername(username);
+    }
+
+    public Optional<Account> findByEmail(String email) {
+        return accountRepository.findByEmail(email);
+    }
+
+    public boolean existsByUsername(String username) {
+        return accountRepository.existsByUsername(username);
+    }
+
+    public boolean existsByEmail(String email) {
+        return accountRepository.existsByEmail(email);
     }
 }

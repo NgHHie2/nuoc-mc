@@ -1,6 +1,9 @@
 package com.example.accountservice.model;
 
 import java.time.LocalDateTime;
+
+import com.example.accountservice.enums.Role;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -22,5 +25,5 @@ public class Account {
     private LocalDateTime birthDay;
     private String phoneNumber;
     private String email;
-    
+    private Role role;
 }

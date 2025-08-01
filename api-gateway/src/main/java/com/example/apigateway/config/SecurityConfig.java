@@ -32,6 +32,7 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/account/login",
                                 "/account/register",
+                                "/api/auth/**",
                                 "/actuator/**")
                         .permitAll()
                         // All other requests need authentication
