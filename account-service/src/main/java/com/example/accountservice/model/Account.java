@@ -3,6 +3,8 @@ package com.example.accountservice.model;
 import java.time.LocalDateTime;
 
 import com.example.accountservice.enums.Role;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -19,6 +21,8 @@ public class Account {
     private Integer id;
 
     private String username;
+
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
     private String firstName;
     private String lastName;

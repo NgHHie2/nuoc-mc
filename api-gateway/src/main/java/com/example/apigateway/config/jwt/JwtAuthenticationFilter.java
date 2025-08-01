@@ -31,31 +31,53 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     private static final String TOKEN_PREFIX = "Bearer ";
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
-    // Danh sách các path không cần xác thực
+    // Danh sách các path không cần xác thực - BỔ SUNG SWAGGER PATHS
     private static final List<String> EXCLUDED_PATHS = Arrays.asList(
+            // API Documentation
             "/v3/api-docs",
             "/swagger-ui",
             "/webjars",
+            "/swagger-resources",
+            "/configuration",
+
+            // Service-specific API docs
+            "/account-service/v3/api-docs",
+            "/learn-service/v3/api-docs",
+            "/stats-service/v3/api-docs",
+
+            // Authentication endpoints
             "/account/login",
             "/account/register",
-            "/actuator");
+            "/account/validate-token",
+
+            // Health check
+            "/actuator",
+
+            // Static resources
+            "/favicon.ico",
+            "/error");
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
+        log.debug("Processing request for path: {}", path);
+
         // Bỏ qua authentication cho các path được định nghĩa
         if (shouldSkipAuthentication(path)) {
+            log.debug("Skipping authentication for path: {}", path);
             return chain.filter(exchange);
         }
 
         String token = resolveToken(exchange.getRequest());
 
         if (token == null || token.isEmpty()) {
+            log.warn("No token found for path: {}", path);
             return handleUnauthorized(exchange);
         }
 
         if (!jwtTokenProvider.validateToken(token)) {
+            log.warn("Invalid token for path: {}", path);
             return handleUnauthorized(exchange);
         }
 
@@ -94,7 +116,21 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     }
 
     private boolean shouldSkipAuthentication(String path) {
-        return EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
+        boolean shouldSkip = EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
+
+        // Thêm logic đặc biệt cho các path pattern phức tạp
+        if (!shouldSkip) {
+            // Skip cho tất cả swagger-ui resources
+            shouldSkip = path.contains("swagger-ui") ||
+                    path.contains("api-docs") ||
+                    path.contains("webjars") ||
+                    path.endsWith(".css") ||
+                    path.endsWith(".js") ||
+                    path.endsWith(".png") ||
+                    path.endsWith(".ico");
+        }
+
+        return shouldSkip;
     }
 
     private Mono<Void> handleUnauthorized(ServerWebExchange exchange) {

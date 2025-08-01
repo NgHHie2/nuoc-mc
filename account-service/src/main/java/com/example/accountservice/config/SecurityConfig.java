@@ -25,7 +25,12 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+                .formLogin(formLogin -> formLogin.disable()) // Tắt form login
+                .httpBasic(httpBasic -> httpBasic.disable()) // Tắt HTTP Basic auth
+                .logout(logout -> logout.disable()) // Tắt logout endpoint mặc định
+                .authorizeHttpRequests(auth -> auth
+                        .anyRequest().permitAll() // Cho phép tất cả request
+                );
 
         return http.build();
     }

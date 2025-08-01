@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,13 +19,16 @@ import com.example.accountservice.kafka.KafkaProducer;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
 import com.example.accountservice.util.JwtUtil;
+import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import jakarta.transaction.Transactional;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
+@Transactional
 @RequestMapping("/account")
 public class AuthController {
 
@@ -40,9 +44,13 @@ public class AuthController {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private ApplicationEventPublisher applicationEventPublisher;
+
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody Account account) {
         try {
+            log.info("Received account: {}", account);
             // Simple validation
             if (account.getUsername() == null || account.getUsername().trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Username is required"));
@@ -69,7 +77,7 @@ public class AuthController {
             }
 
             Account savedAccount = accountService.saveAccount(account);
-            kafkaProducer.sendAccount("account-registered", savedAccount);
+            applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
 
             // Generate JWT token
             String token = jwtUtil.generateToken(savedAccount.getId(), savedAccount.getUsername(),
@@ -170,8 +178,6 @@ public class AuthController {
 
         public AuthResponse(String token, Account account) {
             this.token = token;
-            // Remove password before sending response
-            account.setPassword(null);
             this.account = account;
         }
     }

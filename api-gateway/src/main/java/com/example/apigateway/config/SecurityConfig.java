@@ -23,22 +23,13 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .formLogin(formLogin -> formLogin.disable()) // Tắt form login
+                .httpBasic(httpBasic -> httpBasic.disable()) // Tắt HTTP Basic auth
+                .logout(logout -> logout.disable()) // Tắt logout endpoint mặc định
+                // Quan trọng: Tắt hết authentication mặc định của Spring Security
                 .authorizeExchange(exchanges -> exchanges
-                        // Public endpoints
-                        .pathMatchers(
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/webjars/**",
-                                "/account/login",
-                                "/account/register",
-                                "/api/auth/**",
-                                "/actuator/**")
-                        .permitAll()
-                        // All other requests need authentication
-                        .anyExchange().authenticated())
-                .formLogin(formLogin -> formLogin.disable())
-                .httpBasic(httpBasic -> httpBasic.disable())
+                        .anyExchange().permitAll() // Cho phép tất cả request đi qua
+                )
                 .build();
     }
 
