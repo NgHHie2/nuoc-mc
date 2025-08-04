@@ -8,14 +8,12 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.accountservice.enums.Role;
-import com.example.accountservice.kafka.KafkaProducer;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
 import com.example.accountservice.util.JwtUtil;
@@ -23,6 +21,7 @@ import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.transaction.Transactional;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -36,9 +35,6 @@ public class AuthController {
     private AccountService accountService;
 
     @Autowired
-    private KafkaProducer kafkaProducer;
-
-    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -48,20 +44,8 @@ public class AuthController {
     private ApplicationEventPublisher applicationEventPublisher;
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Account account) {
+    public ResponseEntity<?> register(@Valid @RequestBody Account account) {
         try {
-            log.info("Received account: {}", account);
-            // Simple validation
-            if (account.getUsername() == null || account.getUsername().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Username is required"));
-            }
-            if (account.getPassword() == null || account.getPassword().length() < 6) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Password must be at least 6 characters"));
-            }
-            if (account.getEmail() == null || account.getEmail().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Email is required"));
-            }
-
             // Check duplicates
             if (accountService.existsByUsername(account.getUsername())) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Username already exists"));
@@ -70,18 +54,17 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(Map.of("error", "Email already exists"));
             }
 
-            // Encrypt password and set default role
+            // Set defaults and encrypt password
             account.setPassword(passwordEncoder.encode(account.getPassword()));
             if (account.getRole() == null) {
-                account.setRole(Role.STUDENT); // Default role
+                account.setRole(Role.STUDENT);
             }
 
             Account savedAccount = accountService.saveAccount(account);
             applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
 
-            // Generate JWT token
-            String token = jwtUtil.generateToken(savedAccount.getId(), savedAccount.getUsername(),
-                    savedAccount.getRole());
+            String token = jwtUtil.generateToken(savedAccount.getId(),
+                    savedAccount.getUsername(), savedAccount.getRole());
 
             log.info("User registered successfully: {}", savedAccount.getUsername());
             return ResponseEntity.ok(new AuthResponse(token, savedAccount));
@@ -99,26 +82,17 @@ public class AuthController {
             String username = loginRequest.getUsername();
             String password = loginRequest.getPassword();
 
-            if (username == null || username.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Username is required"));
-            }
-            if (password == null || password.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Password is required"));
+            if (username == null || username.trim().isEmpty() || password == null || password.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Username and password are required"));
             }
 
             Optional<Account> accountOpt = accountService.findByUsername(username);
-            if (accountOpt.isEmpty()) {
+            if (accountOpt.isEmpty() || !passwordEncoder.matches(password, accountOpt.get().getPassword())) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of("error", "Invalid username or password"));
             }
 
             Account account = accountOpt.get();
-            if (!passwordEncoder.matches(password, account.getPassword())) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("error", "Invalid username or password"));
-            }
-
-            // Generate JWT token
             String token = jwtUtil.generateToken(account.getId(), account.getUsername(), account.getRole());
 
             log.info("User logged in successfully: {}", account.getUsername());
@@ -135,33 +109,22 @@ public class AuthController {
     public ResponseEntity<?> validateToken(@RequestBody Map<String, String> request) {
         try {
             String token = request.get("token");
-
-            if (token == null || token.isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("valid", false, "error", "Token is required"));
+            if (token == null || token.trim().isEmpty()) {
+                return ResponseEntity.ok(Map.of("valid", false, "error", "Token is required"));
             }
 
             // Remove Bearer prefix if present
-            if (token.startsWith("Bearer ")) {
-                token = token.substring(7);
-            }
+            token = token.startsWith("Bearer ") ? token.substring(7) : token;
 
-            boolean isValid = jwtUtil.validateToken(token);
-
-            if (isValid) {
-                String username = jwtUtil.getUsernameFromToken(token);
-                Integer userId = jwtUtil.getUserIdFromToken(token);
-                Role userRole = jwtUtil.getUserRoleFromToken(token);
-
-                return ResponseEntity.ok(Map.of(
-                        "valid", true,
-                        "userId", userId,
-                        "username", username,
-                        "userRole", userRole.name() // Convert enum to string for JSON
-                ));
-            } else {
+            if (!jwtUtil.validateToken(token)) {
                 return ResponseEntity.ok(Map.of("valid", false, "error", "Invalid token"));
             }
+
+            return ResponseEntity.ok(Map.of(
+                    "valid", true,
+                    "userId", jwtUtil.getUserIdFromToken(token),
+                    "username", jwtUtil.getUsernameFromToken(token),
+                    "userRole", jwtUtil.getUserRoleFromToken(token).name()));
 
         } catch (Exception e) {
             log.error("Token validation failed: {}", e.getMessage());
