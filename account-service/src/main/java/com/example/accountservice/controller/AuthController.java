@@ -8,6 +8,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +18,7 @@ import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
 import com.example.accountservice.util.JwtUtil;
+import com.example.accountservice.util.UsernameGenerator;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -27,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
+@CrossOrigin(origins = "*")
 @Transactional
 @RequestMapping("/account")
 public class AuthController {
@@ -41,21 +44,39 @@ public class AuthController {
     private JwtUtil jwtUtil;
 
     @Autowired
+    private UsernameGenerator usernameGenerator;
+
+    @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody Account account) {
         try {
-            // Check duplicates
-            if (accountService.existsByUsername(account.getUsername())) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Username already exists"));
+            // Kiểm tra trùng lặp CCCD
+            if (accountService.existsByCccd(account.getCccd())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "CCCD already exists"));
             }
+
+            // Kiểm tra trùng lặp email
             if (accountService.existsByEmail(account.getEmail())) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Email already exists"));
             }
 
-            // Set defaults and encrypt password
+            // Tạo username tự động từ họ tên
+            String generatedUsername = usernameGenerator.generateUsername(
+                    account.getFirstName(),
+                    account.getLastName());
+            account.setUsername(generatedUsername);
+
+            // Set password mặc định nếu không có
+            if (account.getPassword() == null || account.getPassword().trim().isEmpty()) {
+                account.setPassword(usernameGenerator.getDefaultPassword());
+            }
+
+            // Mã hóa password
             account.setPassword(passwordEncoder.encode(account.getPassword()));
+
+            // Set role mặc định
             if (account.getRole() == null) {
                 account.setRole(Role.STUDENT);
             }
@@ -66,8 +87,11 @@ public class AuthController {
             String token = jwtUtil.generateToken(savedAccount.getId(),
                     savedAccount.getUsername(), savedAccount.getRole());
 
-            log.info("User registered successfully: {}", savedAccount.getUsername());
-            return ResponseEntity.ok(new AuthResponse(token, savedAccount));
+            log.info("User registered successfully: {} with username: {}",
+                    savedAccount.getFirstName() + " " + savedAccount.getLastName(),
+                    savedAccount.getUsername());
+
+            return ResponseEntity.ok(token);
 
         } catch (Exception e) {
             log.error("Registration failed: {}", e.getMessage());
@@ -86,7 +110,7 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(Map.of("error", "Username and password are required"));
             }
 
-            Optional<Account> accountOpt = accountService.findByUsername(username);
+            Optional<Account> accountOpt = accountService.findByUsernameAndVisible(username);
             if (accountOpt.isEmpty() || !passwordEncoder.matches(password, accountOpt.get().getPassword())) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of("error", "Invalid username or password"));
@@ -96,7 +120,7 @@ public class AuthController {
             String token = jwtUtil.generateToken(account.getId(), account.getUsername(), account.getRole());
 
             log.info("User logged in successfully: {}", account.getUsername());
-            return ResponseEntity.ok(new AuthResponse(token, account));
+            return ResponseEntity.ok(token);
 
         } catch (Exception e) {
             log.error("Login failed: {}", e.getMessage());
@@ -129,19 +153,6 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Token validation failed: {}", e.getMessage());
             return ResponseEntity.ok(Map.of("valid", false, "error", "Token validation failed"));
-        }
-    }
-
-    @Data
-    public static class AuthResponse {
-        private String token;
-
-        @JsonProperty("account")
-        private Account account;
-
-        public AuthResponse(String token, Account account) {
-            this.token = token;
-            this.account = account;
         }
     }
 }
