@@ -1,14 +1,18 @@
 package com.example.accountservice.model;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import com.example.accountservice.enums.Role;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -20,7 +24,7 @@ public class Account {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
     @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
     private String username; // Sẽ được tạo tự động
@@ -51,4 +55,7 @@ public class Account {
     private Integer visible = 1; // 1: hiển thị, 0: đã xóa (soft delete)
 
     private Role role;
+
+    @OneToMany(mappedBy = "account", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<AccountPosition> accountPositions;
 }

@@ -26,7 +26,7 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
-    public String generateToken(Integer userId, String username, Role userRole) {
+    public String generateToken(Long userId, String username, Role userRole) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpiration);
 

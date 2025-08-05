@@ -40,7 +40,7 @@ public class RequestContextUtil {
         return roleHeader != null ? Role.valueOf(roleHeader) : null;
     }
 
-    public boolean isCurrentUser(Integer userId) {
+    public boolean isCurrentUser(Long userId) {
         Integer currentUserId = getCurrentUserId();
         return currentUserId != null && currentUserId.equals(userId);
     }

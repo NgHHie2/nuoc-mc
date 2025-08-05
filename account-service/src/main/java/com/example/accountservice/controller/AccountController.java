@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.accountservice.dto.RoleDTO;
+import com.example.accountservice.enums.Role;
 import com.example.accountservice.kafka.KafkaProducer;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
@@ -52,13 +54,13 @@ public class AccountController {
     // }
 
     @GetMapping("/{id}")
-    public Optional<Account> getAccountById(@PathVariable int id) {
+    public Optional<Account> getAccountById(@PathVariable Long id) {
         log.info("get user by id: " + id);
         return accountService.getAccountById(id);
     }
 
     @PostMapping("/ids")
-    public List<Account> getAccountsByIds(@RequestBody List<Integer> ids) {
+    public List<Account> getAccountsByIds(@RequestBody List<Long> ids) {
         return accountService.getAccountsByIds(ids);
     }
 
@@ -72,7 +74,6 @@ public class AccountController {
 
     @PostMapping
     public Account createAccount(@Valid @RequestBody Account account) {
-        // Kiểm tra CCCD trùng lặp
         if (accountService.existsByCccd(account.getCccd())) {
             throw new IllegalArgumentException("CCCD already exists");
         }
@@ -103,7 +104,7 @@ public class AccountController {
     }
 
     @PutMapping("/{id}")
-    public Account updateAccount(@PathVariable int id, @Valid @RequestBody Account account) {
+    public Account updateAccount(@PathVariable Long id, @Valid @RequestBody Account account) {
         Optional<Account> existingAccount = accountService.getAccountById(id);
         if (existingAccount.isEmpty()) {
             throw new IllegalArgumentException("Account not found");
@@ -139,8 +140,32 @@ public class AccountController {
         return accountService.saveAccount(account);
     }
 
+    @PutMapping("/assign-role")
+    public Account updateAccountRole(@RequestBody RoleDTO request) {
+        Optional<Account> existingAccount = accountService.getAccountById(request.getAccountId());
+        if (existingAccount.isEmpty()) {
+            throw new IllegalArgumentException("Account not found");
+        }
+
+        Role newRole;
+        try {
+            newRole = Role.valueOf(request.getRole().toUpperCase());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new IllegalArgumentException("Invalid role. Valid roles are: STUDENT, TEACHER, ADMIN");
+        }
+
+        Account account = existingAccount.get();
+        account.setRole(newRole);
+
+        Account updatedAccount = accountService.saveAccount(account);
+        log.info("Updated role for account ID {}: {} -> {}", request.getAccountId(), existingAccount.get().getRole(),
+                newRole);
+
+        return updatedAccount;
+    }
+
     @DeleteMapping("/{id}")
-    public String deleteAccount(@PathVariable int id) {
+    public String deleteAccount(@PathVariable Long id) {
         Optional<Account> account = accountService.getAccountById(id);
 
         if (account.isPresent()) {

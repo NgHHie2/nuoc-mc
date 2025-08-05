@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.repository.AccountRepository;
 
@@ -21,7 +22,7 @@ public class AccountService {
         return accountRepository.findByVisible(1, pageable);
     }
 
-    public Optional<Account> getAccountById(int id) {
+    public Optional<Account> getAccountById(Long id) {
         return accountRepository.findByIdAndVisible(id, 1);
     }
 
@@ -33,7 +34,7 @@ public class AccountService {
         return accountRepository.save(account);
     }
 
-    public void deleteAccount(int id) {
+    public void deleteAccount(Long id) {
         // Soft delete: set visible = 0
         Optional<Account> account = accountRepository.findById(id);
         if (account.isPresent()) {
@@ -43,7 +44,7 @@ public class AccountService {
         }
     }
 
-    public List<Account> getAccountsByIds(List<Integer> ids) {
+    public List<Account> getAccountsByIds(List<Long> ids) {
         return accountRepository.findAllByIdInAndVisible(ids, 1);
     }
 

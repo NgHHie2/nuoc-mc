@@ -22,11 +22,11 @@ public class OpenApiConfig {
                                                 .description("API for Account Management")
                                                 .version("1.0.0"))
                                 .addServersItem(new Server()
-                                                .url("http://localhost:8080")
-                                                .description("API Gateway"))
-                                .addServersItem(new Server()
                                                 .url("http://localhost:8082")
-                                                .description("Direct to Account Service"));
+                                                .description("Direct to Account Service"))
+                                .addServersItem(new Server()
+                                                .url("http://localhost:8080")
+                                                .description("API Gateway"));
         }
 
         @Bean
