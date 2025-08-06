@@ -2,6 +2,8 @@ package com.example.accountservice.controller;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -16,15 +18,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
+import com.example.accountservice.model.AccountPosition;
 import com.example.accountservice.service.AccountService;
+import com.example.accountservice.service.AccountPositionService;
 import com.example.accountservice.util.JwtUtil;
 import com.example.accountservice.util.UsernameGenerator;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
-import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -45,6 +47,9 @@ public class AuthController {
 
     @Autowired
     private UsernameGenerator usernameGenerator;
+
+    @Autowired
+    private AccountPositionService accountPositionService;
 
     @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
@@ -84,14 +89,28 @@ public class AuthController {
             Account savedAccount = accountService.saveAccount(account);
             applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
 
-            String token = jwtUtil.generateToken(savedAccount.getId(),
-                    savedAccount.getUsername(), savedAccount.getRole());
+            // Lấy positions của user
+            List<Long> positions = getPositionsByAccount(savedAccount.getId());
 
+            String token = jwtUtil.generateToken(savedAccount.getId(),
+                    savedAccount.getRole(), positions);
+
+            // Log thông tin JWT (bao gồm JWT ID)
             log.info("User registered successfully: {} with username: {}",
                     savedAccount.getFirstName() + " " + savedAccount.getLastName(),
                     savedAccount.getUsername());
 
-            return ResponseEntity.ok(token);
+            // Log JWT ID cho debugging
+            String jwtId = jwtUtil.getJwtIdFromToken(token);
+            log.info("Generated JWT ID for user {}: {}", savedAccount.getUsername(), jwtId);
+
+            return ResponseEntity.ok(Map.of(
+                    "token", token,
+                    "jwtId", jwtId,
+                    "userId", savedAccount.getId(),
+                    "username", savedAccount.getUsername(),
+                    "role", savedAccount.getRole().name(),
+                    "positions", positions));
 
         } catch (Exception e) {
             log.error("Registration failed: {}", e.getMessage());
@@ -117,10 +136,26 @@ public class AuthController {
             }
 
             Account account = accountOpt.get();
-            String token = jwtUtil.generateToken(account.getId(), account.getUsername(), account.getRole());
 
-            log.info("User logged in successfully: {}", account.getUsername());
-            return ResponseEntity.ok(token);
+            // Lấy positions của user
+            List<Long> positions = getPositionsByAccount(account.getId());
+
+            String token = jwtUtil.generateToken(account.getId(), account.getRole(), positions);
+
+            // Log thông tin JWT (bao gồm JWT ID)
+            String jwtId = jwtUtil.getJwtIdFromToken(token);
+            log.info("User logged in successfully: {} with JWT ID: {}", account.getUsername(), jwtId);
+
+            // Log full token info for debugging
+            jwtUtil.logTokenInfo(token);
+
+            return ResponseEntity.ok(Map.of(
+                    "token", token,
+                    "jwtId", jwtId,
+                    "userId", account.getId(),
+                    "username", account.getUsername(),
+                    "role", account.getRole().name(),
+                    "positions", positions));
 
         } catch (Exception e) {
             log.error("Login failed: {}", e.getMessage());
@@ -129,30 +164,16 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/validate-token")
-    public ResponseEntity<?> validateToken(@RequestBody Map<String, String> request) {
+    // Helper method để lấy position IDs của user
+    private List<Long> getPositionsByAccount(Long accountId) {
         try {
-            String token = request.get("token");
-            if (token == null || token.trim().isEmpty()) {
-                return ResponseEntity.ok(Map.of("valid", false, "error", "Token is required"));
-            }
-
-            // Remove Bearer prefix if present
-            token = token.startsWith("Bearer ") ? token.substring(7) : token;
-
-            if (!jwtUtil.validateToken(token)) {
-                return ResponseEntity.ok(Map.of("valid", false, "error", "Invalid token"));
-            }
-
-            return ResponseEntity.ok(Map.of(
-                    "valid", true,
-                    "userId", jwtUtil.getUserIdFromToken(token),
-                    "username", jwtUtil.getUsernameFromToken(token),
-                    "userRole", jwtUtil.getUserRoleFromToken(token).name()));
-
+            List<AccountPosition> accountPositions = accountPositionService.getPositionsByAccount(accountId);
+            return accountPositions.stream()
+                    .map(ap -> ap.getPosition().getId()) // Lấy positionId thay vì name
+                    .collect(Collectors.toList());
         } catch (Exception e) {
-            log.error("Token validation failed: {}", e.getMessage());
-            return ResponseEntity.ok(Map.of("valid", false, "error", "Token validation failed"));
+            log.warn("Cannot get positions for account {}: {}", accountId, e.getMessage());
+            return List.of(); // Trả về empty list nếu có lỗi
         }
     }
 }

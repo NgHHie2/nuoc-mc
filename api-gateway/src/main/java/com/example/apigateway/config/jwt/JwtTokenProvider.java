@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -20,26 +21,11 @@ public class JwtTokenProvider {
     @Value("${jwt.secret:mySecretKeyForJwtTokenThatShouldBeAtLeast256BitsLongToEnsureSecurityAndProperFunctioning}")
     private String jwtSecret;
 
-    @Value("${jwt.expiration:86400000}") // 24 hours in milliseconds
-    private long jwtExpiration;
-
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
-    public String generateToken(CustomUserDetail userDetail) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtExpiration);
-
-        return Jwts.builder()
-                .subject(userDetail.getUsername())
-                .claim("userId", userDetail.getUserId())
-                .claim("userRole", userDetail.getUserRole())
-                .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(getSigningKey())
-                .compact();
-    }
+    // API Gateway chỉ decode, không tạo JWT
 
     public String getUsernameFromToken(String token) {
         Claims claims = Jwts.parser()
@@ -47,7 +33,7 @@ public class JwtTokenProvider {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-        return claims.getSubject();
+        return claims.getSubject(); // Sẽ trả về userId dưới dạng string
     }
 
     public Integer getUserIdFromToken(String token) {
@@ -68,6 +54,27 @@ public class JwtTokenProvider {
         return claims.get("userRole", String.class);
     }
 
+    // Method để lấy positions
+    @SuppressWarnings("unchecked")
+    public List<Long> getPositionsFromToken(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+        return claims.get("positions", List.class);
+    }
+
+    // Method để lấy JWT ID
+    public String getJwtIdFromToken(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+        return claims.getId();
+    }
+
     public boolean validateToken(String token) {
         try {
             Jwts.parser()
@@ -82,15 +89,54 @@ public class JwtTokenProvider {
     }
 
     public Authentication getAuthentication(String token) {
-        String username = getUsernameFromToken(token);
+        String userIdStr = getUsernameFromToken(token); // Subject là userId
         String userRole = getUserRoleFromToken(token);
         Integer userId = getUserIdFromToken(token);
+        List<Long> positions = getPositionsFromToken(token);
 
-        CustomUserDetail userDetail = new CustomUserDetail(userId, username, null, userRole);
+        CustomUserDetail userDetail = new CustomUserDetail(userId, userIdStr, positions, userRole);
 
         return new UsernamePasswordAuthenticationToken(
                 userDetail,
                 null,
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + userRole)));
+    }
+
+    // Method để lấy tất cả thông tin từ token
+    public Claims getAllClaimsFromToken(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    // Method tiện ích để log JWT ID (cho debugging)
+    public void logTokenInfo(String token) {
+        try {
+            Claims claims = getAllClaimsFromToken(token);
+            log.info("Token Info - JTI: {}, Subject: {}, UserId: {}, Role: {}, Positions: {}, Issued: {}, Expires: {}",
+                    claims.getId(),
+                    claims.getSubject(),
+                    claims.get("userId"),
+                    claims.get("userRole"),
+                    claims.get("positions"),
+                    claims.getIssuedAt(),
+                    claims.getExpiration());
+        } catch (Exception e) {
+            log.error("Cannot parse token info: {}", e.getMessage());
+        }
+    }
+
+    // Method để check token có expired không
+    public boolean isTokenExpired(String token) {
+        Date expiration = getExpirationDateFromToken(token);
+        return expiration.before(new Date());
+    }
+
+    // Method để lấy expiration date
+    public Date getExpirationDateFromToken(String token) {
+        Claims claims = getAllClaimsFromToken(token);
+        return claims.getExpiration();
     }
 }

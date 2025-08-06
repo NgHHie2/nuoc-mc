@@ -4,19 +4,34 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.repository.AccountRepository;
+import com.example.accountservice.util.UsernameGenerator;
+import com.example.accountservice.util.listener.event.UserRegisteredEvent;
+
+import jakarta.transaction.Transactional;
 
 @Service
 public class AccountService {
 
     @Autowired
     private AccountRepository accountRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private UsernameGenerator usernameGenerator;
+
+    @Autowired
+    private ApplicationEventPublisher applicationEventPublisher;
 
     public Page<Account> getAllAccount(Pageable pageable) {
         return accountRepository.findByVisible(1, pageable);
@@ -26,14 +41,44 @@ public class AccountService {
         return accountRepository.findByIdAndVisible(id, 1);
     }
 
+    @Transactional
     public Account saveAccount(Account account) {
+        if (existsByCccd(account.getCccd())) {
+            throw new IllegalArgumentException("CCCD already exists");
+        }
+
+        // Kiểm tra email trùng lặp (nếu có email)
+        if (account.getEmail() != null && !account.getEmail().trim().isEmpty()
+                && existsByEmail(account.getEmail())) {
+            throw new IllegalArgumentException("Email already exists");
+        }
+
+        // Tạo username tự động nếu chưa có
+        if (account.getUsername() == null || account.getUsername().trim().isEmpty()) {
+            String generatedUsername = usernameGenerator.generateUsername(
+                    account.getFirstName(),
+                    account.getLastName());
+            account.setUsername(generatedUsername);
+        }
+
+        // Set password mặc định nếu chưa có
+        if (account.getPassword() == null || account.getPassword().trim().isEmpty()) {
+            account.setPassword(usernameGenerator.getDefaultPassword());
+        }
+
+        account.setPassword(passwordEncoder.encode(account.getPassword()));
+
         // Set visible = 1 nếu chưa có giá trị
         if (account.getVisible() == null) {
             account.setVisible(1);
         }
-        return accountRepository.save(account);
+
+        Account savedAccount = accountRepository.save(account);
+        applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
+        return savedAccount;
     }
 
+    @Transactional
     public void deleteAccount(Long id) {
         // Soft delete: set visible = 0
         Optional<Account> account = accountRepository.findById(id);

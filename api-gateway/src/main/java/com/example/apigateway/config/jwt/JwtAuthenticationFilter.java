@@ -20,6 +20,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -85,11 +86,16 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             Authentication authentication = jwtTokenProvider.getAuthentication(token);
             CustomUserDetail userDetail = (CustomUserDetail) authentication.getPrincipal();
 
-            // Thêm userId và userRole vào header trước khi forward đến các service khác
+            // Convert positions list to comma-separated string
+            String positionsHeader = userDetail.getPositions() != null ? userDetail.getPositions().stream()
+                    .map(String::valueOf)
+                    .collect(Collectors.joining(",")) : "";
+
+            // Thêm userId, userRole và positions vào header thay vì username
             ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                     .header("X-User-Id", userDetail.getUserId().toString())
                     .header("X-User-Role", userDetail.getUserRole())
-                    .header("X-Username", userDetail.getUsername())
+                    .header("X-Positions", positionsHeader) // Thay X-Username bằng X-Positions
                     .build();
 
             ServerWebExchange modifiedExchange = exchange.mutate()

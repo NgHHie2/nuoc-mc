@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,6 +25,7 @@ import com.example.accountservice.kafka.KafkaProducer;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
 import com.example.accountservice.util.UsernameGenerator;
+import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -32,7 +34,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RestController
 @CrossOrigin(origins = "*")
-@Transactional
 @RequestMapping("/account")
 public class AccountController {
 
@@ -44,14 +45,6 @@ public class AccountController {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private UsernameGenerator usernameGenerator;
-
-    // @GetMapping
-    // public List<Account> getAllAccount() {
-    // return accountService.getAllAccount();
-    // }
 
     @GetMapping("/{id}")
     public Optional<Account> getAccountById(@PathVariable Long id) {
@@ -74,32 +67,7 @@ public class AccountController {
 
     @PostMapping
     public Account createAccount(@Valid @RequestBody Account account) {
-        if (accountService.existsByCccd(account.getCccd())) {
-            throw new IllegalArgumentException("CCCD already exists");
-        }
-
-        // Kiểm tra email trùng lặp (nếu có email)
-        if (account.getEmail() != null && !account.getEmail().trim().isEmpty()
-                && accountService.existsByEmail(account.getEmail())) {
-            throw new IllegalArgumentException("Email already exists");
-        }
-
-        // Tạo username tự động nếu chưa có
-        if (account.getUsername() == null || account.getUsername().trim().isEmpty()) {
-            String generatedUsername = usernameGenerator.generateUsername(
-                    account.getFirstName(),
-                    account.getLastName());
-            account.setUsername(generatedUsername);
-        }
-
-        // Set password mặc định nếu chưa có
-        if (account.getPassword() == null || account.getPassword().trim().isEmpty()) {
-            account.setPassword(usernameGenerator.getDefaultPassword());
-        }
-
-        account.setPassword(passwordEncoder.encode(account.getPassword()));
         Account savedAccount = accountService.saveAccount(account);
-        kafkaProducer.sendAccount("account-created", savedAccount);
         return savedAccount;
     }
 

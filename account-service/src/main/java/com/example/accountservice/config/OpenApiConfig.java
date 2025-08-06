@@ -5,6 +5,8 @@ import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.StringSchema;
 import io.swagger.v3.oas.models.parameters.Parameter;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -26,7 +28,17 @@ public class OpenApiConfig {
                                                 .description("Direct to Account Service"))
                                 .addServersItem(new Server()
                                                 .url("http://localhost:8080")
-                                                .description("API Gateway"));
+                                                .description("API Gateway"))
+                                .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
+                                .components(new io.swagger.v3.oas.models.Components()
+                                                .addSecuritySchemes("bearerAuth",
+                                                                new SecurityScheme()
+                                                                                .name("bearerAuth")
+                                                                                .type(SecurityScheme.Type.HTTP)
+                                                                                .scheme("bearer")
+                                                                                .bearerFormat("JWT")
+                                                                                .description("JWT Bearer Token")));
+
         }
 
         @Bean
@@ -49,17 +61,17 @@ public class OpenApiConfig {
                                         .required(false)
                                         .schema(new StringSchema());
 
-                        // Thêm X-Username header
-                        Parameter usernameParam = new Parameter()
+                        // Thêm X-Positions header (thay vì X-Username)
+                        Parameter positionsParam = new Parameter()
                                         .in("header")
-                                        .name("X-Username")
-                                        .description("Username from Gateway")
+                                        .name("X-Positions")
+                                        .description("Comma-separated Position IDs from Gateway")
                                         .required(false)
                                         .schema(new StringSchema());
 
                         operation.addParametersItem(userIdParam);
                         operation.addParametersItem(userRoleParam);
-                        operation.addParametersItem(usernameParam);
+                        operation.addParametersItem(positionsParam);
 
                         return operation;
                 };

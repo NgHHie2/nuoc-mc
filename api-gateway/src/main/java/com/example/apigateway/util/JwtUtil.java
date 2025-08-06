@@ -1,9 +1,9 @@
 package com.example.apigateway.util;
 
-import com.example.apigateway.config.jwt.CustomUserDetail;
 import com.example.apigateway.config.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -11,13 +11,7 @@ public class JwtUtil {
 
     private final JwtTokenProvider jwtTokenProvider;
 
-    /**
-     * Tạo JWT token từ thông tin user
-     */
-    public String generateToken(Integer userId, String username, String userRole) {
-        CustomUserDetail userDetail = new CustomUserDetail(userId, username, null, userRole);
-        return jwtTokenProvider.generateToken(userDetail);
-    }
+    // API Gateway chỉ decode JWT, không generate
 
     /**
      * Validate JWT token
@@ -27,7 +21,7 @@ public class JwtUtil {
     }
 
     /**
-     * Lấy username từ token
+     * Lấy userId string từ token (subject)
      */
     public String getUsernameFromToken(String token) {
         return jwtTokenProvider.getUsernameFromToken(token);
@@ -48,6 +42,20 @@ public class JwtUtil {
     }
 
     /**
+     * Lấy positions từ token
+     */
+    public List<Long> getPositionsFromToken(String token) {
+        return jwtTokenProvider.getPositionsFromToken(token);
+    }
+
+    /**
+     * Lấy JWT ID từ token
+     */
+    public String getJwtIdFromToken(String token) {
+        return jwtTokenProvider.getJwtIdFromToken(token);
+    }
+
+    /**
      * Extract token từ Bearer header
      */
     public String extractTokenFromBearer(String bearerToken) {
@@ -62,5 +70,19 @@ public class JwtUtil {
      */
     public String createBearerToken(String jwt) {
         return "Bearer " + jwt;
+    }
+
+    /**
+     * Log thông tin token (cho debugging)
+     */
+    public void logTokenInfo(String token) {
+        jwtTokenProvider.logTokenInfo(token);
+    }
+
+    /**
+     * Check token có expired không
+     */
+    public boolean isTokenExpired(String token) {
+        return jwtTokenProvider.isTokenExpired(token);
     }
 }

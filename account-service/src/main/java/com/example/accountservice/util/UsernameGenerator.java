@@ -3,6 +3,7 @@ package com.example.accountservice.util;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.example.accountservice.repository.AccountRepository;
 import com.example.accountservice.service.AccountService;
 
 import java.text.Normalizer;
@@ -12,7 +13,7 @@ import java.util.regex.Pattern;
 public class UsernameGenerator {
 
     @Autowired
-    private AccountService accountService;
+    private AccountRepository accountRepository;
 
     private static final Pattern DIACRITICS_PATTERN = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
 
@@ -71,7 +72,7 @@ public class UsernameGenerator {
         String username = baseUsername;
         int counter = 1;
 
-        while (accountService.existsByUsername(username)) {
+        while (accountRepository.existsByUsernameAndVisible(username, 1)) {
             username = baseUsername + counter;
             counter++;
         }
