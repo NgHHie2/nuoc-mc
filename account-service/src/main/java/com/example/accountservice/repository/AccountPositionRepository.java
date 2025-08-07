@@ -10,9 +10,11 @@ import com.example.accountservice.model.Position;
 @Repository
 public interface AccountPositionRepository extends JpaRepository<AccountPosition, Long> {
 
-    List<AccountPosition> findByAccountAndVisible(Account account, Integer visible);
+    List<AccountPosition> findByAccount(Account account);
 
-    List<AccountPosition> findByPositionAndVisible(Position position, Integer visible);
+    List<AccountPosition> findByPosition(Position position);
 
-    boolean existsByAccountAndPositionAndVisible(Account account, Position position, Integer visible);
+    boolean existsByAccountAndPosition(Account account, Position position);
+
+    boolean deleteByAccountAndPosition(Account account, Position position);
 }

@@ -9,17 +9,18 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
+
+import com.example.apigateway.model.RedisTokenInfo;
+import com.example.apigateway.service.RedisTokenService;
+
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final RedisTokenService redisTokenService;
 
     private static final String TOKEN_PREFIX = "Bearer ";
     private static final String AUTHORIZATION_HEADER = "Authorization";
@@ -82,12 +84,31 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return handleUnauthorized(exchange);
         }
 
+        // Lấy JTI từ token
+        Long accountId = jwtTokenProvider.getUserIdFromToken(token);
+
+        // Kiểm tra token có tồn tại trong Redis không
+        Optional<RedisTokenInfo> redisTokenInfo = redisTokenService.getTokenInfo(accountId);
+
+        if (redisTokenInfo.isEmpty()
+                || !redisTokenInfo.get().getJti().equals(jwtTokenProvider.getJwtIdFromToken(token))) {
+            log.warn("Token not found in Redis or revoked - accId: {}, Path: {}", accountId, path);
+            return handleUnauthorized(exchange);
+        }
+
         try {
-            Authentication authentication = jwtTokenProvider.getAuthentication(token);
-            CustomUserDetail userDetail = (CustomUserDetail) authentication.getPrincipal();
+            // Sử dụng thông tin từ Redis thay vì decode JWT
+            RedisTokenInfo tokenInfo = redisTokenInfo.get();
+
+            // Tạo CustomUserDetail từ Redis data
+            CustomUserDetail userDetail = new CustomUserDetail(
+                    tokenInfo.getAccountId().longValue(),
+                    tokenInfo.getAccountId().toString(),
+                    tokenInfo.getPositions(),
+                    tokenInfo.getRole());
 
             // Convert positions list to comma-separated string
-            String positionsHeader = userDetail.getPositions() != null ? userDetail.getPositions().stream()
+            String positionsHeader = tokenInfo.getPositions() != null ? tokenInfo.getPositions().stream()
                     .map(String::valueOf)
                     .collect(Collectors.joining(",")) : "";
 
@@ -102,10 +123,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                     .request(modifiedRequest)
                     .build();
 
-            SecurityContext securityContext = new SecurityContextImpl(authentication);
-
-            return chain.filter(modifiedExchange)
-                    .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(securityContext)));
+            return chain.filter(modifiedExchange);
 
         } catch (Exception e) {
             log.error("Cannot set user authentication: {}", e.getMessage());

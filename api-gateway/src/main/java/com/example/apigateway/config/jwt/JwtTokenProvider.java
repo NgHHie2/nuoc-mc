@@ -36,13 +36,13 @@ public class JwtTokenProvider {
         return claims.getSubject(); // Sẽ trả về userId dưới dạng string
     }
 
-    public Integer getUserIdFromToken(String token) {
+    public Long getUserIdFromToken(String token) {
         Claims claims = Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-        return claims.get("userId", Integer.class);
+        return claims.get("userId", Long.class);
     }
 
     public String getUserRoleFromToken(String token) {
@@ -91,7 +91,7 @@ public class JwtTokenProvider {
     public Authentication getAuthentication(String token) {
         String userIdStr = getUsernameFromToken(token); // Subject là userId
         String userRole = getUserRoleFromToken(token);
-        Integer userId = getUserIdFromToken(token);
+        Long userId = getUserIdFromToken(token);
         List<Long> positions = getPositionsFromToken(token);
 
         CustomUserDetail userDetail = new CustomUserDetail(userId, userIdStr, positions, userRole);

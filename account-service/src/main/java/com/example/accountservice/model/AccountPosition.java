@@ -16,8 +16,6 @@ public class AccountPosition {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Integer visible = 1; // 1: active, 0: inactive
-
     @JsonIgnore
     @ManyToOne
     @JoinColumn(name = "account_id")

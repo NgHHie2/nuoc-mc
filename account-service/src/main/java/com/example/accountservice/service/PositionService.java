@@ -14,30 +14,22 @@ public class PositionService {
     private PositionRepository positionRepository;
 
     public List<Position> getAllPositions() {
-        return positionRepository.findByVisible(1);
+        return positionRepository.findAll();
     }
 
     public Optional<Position> getPositionById(Long id) {
-        return positionRepository.findByIdAndVisible(id, 1);
+        return positionRepository.findById(id);
     }
 
     public Position savePosition(Position position) {
-        if (position.getVisible() == null) {
-            position.setVisible(1);
-        }
         return positionRepository.save(position);
     }
 
     public void deletePosition(Long id) {
-        Optional<Position> position = positionRepository.findById(id);
-        if (position.isPresent()) {
-            Position pos = position.get();
-            pos.setVisible(0);
-            positionRepository.save(pos);
-        }
+        positionRepository.deleteById(id);
     }
 
     public boolean existsByName(String name) {
-        return positionRepository.existsByNameAndVisible(name, 1);
+        return positionRepository.existsByName(name);
     }
 }

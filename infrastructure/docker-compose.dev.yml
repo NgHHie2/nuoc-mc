@@ -53,12 +53,24 @@ services:
     networks:
       - microservice-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis-shared
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - microservice-network
+
 volumes:
   kafka_shared_data:
   postgres_account_data:
   postgres_learn_data:
   postgres_stats_data:
   pgadmin_data:
+  redis_data:
 
 networks:
   microservice-network:

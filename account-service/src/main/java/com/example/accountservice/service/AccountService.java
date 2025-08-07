@@ -1,5 +1,7 @@
 package com.example.accountservice.service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,10 +12,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.example.accountservice.dto.AccountSearchDTO;
 import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.repository.AccountRepository;
+import com.example.accountservice.repository.RedisTokenRepository;
 import com.example.accountservice.util.UsernameGenerator;
+import com.example.accountservice.util.listener.event.UserDeletedEvent;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 
 import jakarta.transaction.Transactional;
@@ -23,6 +28,9 @@ public class AccountService {
 
     @Autowired
     private AccountRepository accountRepository;
+
+    @Autowired
+    private RedisTokenRepository redisTokenRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -42,7 +50,44 @@ public class AccountService {
     }
 
     @Transactional
-    public Account saveAccount(Account account) {
+    public Account updateAccount(Account account) {
+        Optional<Account> existingAccount = getAccountById(account.getId());
+        if (existingAccount.isEmpty()) {
+            throw new IllegalArgumentException("Account not found");
+        }
+
+        // Kiểm tra CCCD trùng lặp (trừ chính nó)
+        Optional<Account> accountWithSameCccd = findByCccd(account.getCccd());
+        if (accountWithSameCccd.isPresent() && !accountWithSameCccd.get().getId().equals(account.getId())) {
+            throw new IllegalArgumentException("CCCD already exists");
+        }
+
+        // Kiểm tra email trùng lặp (nếu có email)
+        if (account.getEmail() != null && !account.getEmail().trim().isEmpty()) {
+            Optional<Account> accountWithSameEmail = findByEmail(account.getEmail());
+            if (accountWithSameEmail.isPresent() && !accountWithSameEmail.get().getId().equals(account.getId())) {
+                throw new IllegalArgumentException("Email already exists");
+            }
+        }
+
+        // Nếu có password mới thì mã hóa, nếu không thì giữ nguyên
+        if (account.getPassword() != null && !account.getPassword().trim().isEmpty()) {
+            account.setPassword(passwordEncoder.encode(account.getPassword()));
+        } else {
+            // Giữ nguyên password cũ
+            account.setPassword(existingAccount.get().getPassword());
+        }
+
+        // Giữ nguyên visible từ account cũ
+        account.setVisible(existingAccount.get().getVisible());
+
+        Account savedAccount = saveAccount(account);
+        // if(account.getRole() != existingAccount.get().getRole() )
+        return savedAccount;
+    }
+
+    @Transactional
+    public Account createAccount(Account account) {
         if (existsByCccd(account.getCccd())) {
             throw new IllegalArgumentException("CCCD already exists");
         }
@@ -68,25 +113,33 @@ public class AccountService {
 
         account.setPassword(passwordEncoder.encode(account.getPassword()));
 
-        // Set visible = 1 nếu chưa có giá trị
-        if (account.getVisible() == null) {
-            account.setVisible(1);
-        }
-
-        Account savedAccount = accountRepository.save(account);
+        Account savedAccount = saveAccount(account);
         applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
         return savedAccount;
     }
 
     @Transactional
-    public void deleteAccount(Long id) {
+    public Account saveAccount(Account account) {
+        // Set visible = 1 nếu chưa có giá trị
+        if (account.getVisible() == null) {
+            account.setVisible(1);
+        }
+
+        return accountRepository.save(account);
+    }
+
+    @Transactional
+    public Boolean deleteAccount(Long id) {
         // Soft delete: set visible = 0
         Optional<Account> account = accountRepository.findById(id);
         if (account.isPresent()) {
             Account acc = account.get();
             acc.setVisible(0);
-            accountRepository.save(acc);
+            Account deletedAccount = accountRepository.save(acc);
+            applicationEventPublisher.publishEvent(new UserDeletedEvent(deletedAccount));
+            return true;
         }
+        return false;
     }
 
     public List<Account> getAccountsByIds(List<Long> ids) {
@@ -125,34 +178,81 @@ public class AccountService {
         return accountRepository.existsByCccdAndVisible(cccd, 1);
     }
 
-    // Search functionality
-    public Page<Account> searchAccounts(String keyword, String field, Pageable pageable) {
+    /**
+     * Advanced search với nhiều criteria
+     */
+    public Page<Account> universalSearch(AccountSearchDTO searchDTO, Pageable pageable) {
+
+        // Chuẩn bị parameters
+        String keyword = prepareKeyword(searchDTO.getKeyword());
+        Role role = searchDTO.getRole();
+        List<Long> positionIds = cleanPositionIds(searchDTO.getPositionIds());
+        LocalDateTime birthdayFrom = convertToDateTime(searchDTO.getBirthdayFrom(), true);
+        LocalDateTime birthdayTo = convertToDateTime(searchDTO.getBirthdayTo(), false);
+
+        // Gọi 1 query duy nhất xử lý tất cả cases
+        return accountRepository.universalSearch(
+                keyword, role, positionIds, birthdayFrom, birthdayTo, 1, pageable);
+    }
+
+    // ===================== HELPER METHODS =====================
+
+    /**
+     * Chuẩn bị keyword cho search
+     */
+    private String prepareKeyword(String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
-            return getAllAccount(pageable);
+            return null;
         }
 
-        keyword = "%" + keyword.toLowerCase() + "%";
+        String trimmed = keyword.trim();
 
-        switch (field != null ? field.toLowerCase() : "all") {
-            case "firstname":
-                return accountRepository.findByFirstNameContainingIgnoreCaseAndVisible(keyword.replace("%", ""), 1,
-                        pageable);
-            case "lastname":
-                return accountRepository.findByLastNameContainingIgnoreCaseAndVisible(keyword.replace("%", ""), 1,
-                        pageable);
-            case "username":
-                return accountRepository.findByUsernameContainingIgnoreCaseAndVisible(keyword.replace("%", ""), 1,
-                        pageable);
-            case "email":
-                return accountRepository.findByEmailContainingIgnoreCaseAndVisible(keyword.replace("%", ""), 1,
-                        pageable);
-            case "cccd":
-                return accountRepository.findByCccdContainingAndVisible(keyword.replace("%", ""), 1, pageable);
-            case "phone":
-            case "phonenumber":
-                return accountRepository.findByPhoneNumberContainingAndVisible(keyword.replace("%", ""), 1, pageable);
-            default:
-                return accountRepository.searchByKeywordAndVisible(keyword, 1, pageable);
+        // Thêm wildcard cho partial matching
+        return "%" + trimmed + "%";
+    }
+
+    /**
+     * Clean và validate position IDs
+     */
+    private List<Long> cleanPositionIds(List<Long> positionIds) {
+        if (positionIds == null || positionIds.isEmpty()) {
+            return null;
+        }
+
+        // Remove null và invalid IDs
+        positionIds.removeIf(id -> id == null || id <= 0);
+
+        return positionIds.isEmpty() ? null : positionIds;
+    }
+
+    /**
+     * Convert LocalDate to LocalDateTime for database query
+     */
+    private LocalDateTime convertToDateTime(LocalDate date, boolean isStartOfDay) {
+        if (date == null) {
+            return null;
+        }
+
+        return isStartOfDay ? date.atStartOfDay() : date.atTime(23, 59, 59);
+    }
+
+    /**
+     * Validate search criteria
+     */
+    public void validateSearchCriteria(AccountSearchDTO searchDTO) {
+        // Clean position IDs
+        if (searchDTO.getPositionIds() != null) {
+            searchDTO.getPositionIds().removeIf(id -> id == null || id <= 0);
+            if (searchDTO.getPositionIds().isEmpty()) {
+                searchDTO.setPositionIds(null);
+            }
+        }
+
+        // Validate birthday range
+        if (searchDTO.getBirthdayFrom() != null && searchDTO.getBirthdayTo() != null) {
+            if (searchDTO.getBirthdayFrom().isAfter(searchDTO.getBirthdayTo())) {
+                throw new IllegalArgumentException("Birthday 'from' date must be before 'to' date");
+            }
         }
     }
 }

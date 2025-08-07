@@ -41,39 +41,39 @@ public class OpenApiConfig {
 
         }
 
-        @Bean
-        public OperationCustomizer customGlobalHeaders() {
-                return (Operation operation, HandlerMethod handlerMethod) -> {
+        // @Bean
+        // public OperationCustomizer customGlobalHeaders() {
+        // return (Operation operation, HandlerMethod handlerMethod) -> {
 
-                        // Thêm X-User-Id header
-                        Parameter userIdParam = new Parameter()
-                                        .in("header")
-                                        .name("X-User-Id")
-                                        .description("User ID from Gateway")
-                                        .required(false)
-                                        .schema(new StringSchema());
+        // // Thêm X-User-Id header
+        // Parameter userIdParam = new Parameter()
+        // .in("header")
+        // .name("X-User-Id")
+        // .description("User ID from Gateway")
+        // .required(false)
+        // .schema(new StringSchema());
 
-                        // Thêm X-User-Role header
-                        Parameter userRoleParam = new Parameter()
-                                        .in("header")
-                                        .name("X-User-Role")
-                                        .description("User Role from Gateway")
-                                        .required(false)
-                                        .schema(new StringSchema());
+        // // Thêm X-User-Role header
+        // Parameter userRoleParam = new Parameter()
+        // .in("header")
+        // .name("X-User-Role")
+        // .description("User Role from Gateway")
+        // .required(false)
+        // .schema(new StringSchema());
 
-                        // Thêm X-Positions header (thay vì X-Username)
-                        Parameter positionsParam = new Parameter()
-                                        .in("header")
-                                        .name("X-Positions")
-                                        .description("Comma-separated Position IDs from Gateway")
-                                        .required(false)
-                                        .schema(new StringSchema());
+        // // Thêm X-Positions header (thay vì X-Username)
+        // Parameter positionsParam = new Parameter()
+        // .in("header")
+        // .name("X-Positions")
+        // .description("Comma-separated Position IDs from Gateway")
+        // .required(false)
+        // .schema(new StringSchema());
 
-                        operation.addParametersItem(userIdParam);
-                        operation.addParametersItem(userRoleParam);
-                        operation.addParametersItem(positionsParam);
+        // operation.addParametersItem(userIdParam);
+        // operation.addParametersItem(userRoleParam);
+        // operation.addParametersItem(positionsParam);
 
-                        return operation;
-                };
-        }
+        // return operation;
+        // };
+        // }
 }

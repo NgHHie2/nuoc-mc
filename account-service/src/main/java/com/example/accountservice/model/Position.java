@@ -24,8 +24,6 @@ public class Position {
 
     private String description;
 
-    private Integer visible = 1; // 1: hiển thị, 0: đã xóa
-
     @JsonIgnore
     @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<AccountPosition> accountPositions;

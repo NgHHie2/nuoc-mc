@@ -1,10 +1,13 @@
 package com.example.accountservice.controller;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,11 +18,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.format.annotation.DateTimeFormat;
 
-import com.example.accountservice.dto.RoleDTO;
+import com.example.accountservice.annotation.RequireRole;
+import com.example.accountservice.dto.AccountSearchDTO;
 import com.example.accountservice.enums.Role;
 import com.example.accountservice.kafka.KafkaProducer;
 import com.example.accountservice.model.Account;
@@ -27,6 +33,7 @@ import com.example.accountservice.service.AccountService;
 import com.example.accountservice.util.UsernameGenerator;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -52,96 +59,58 @@ public class AccountController {
         return accountService.getAccountById(id);
     }
 
+    @GetMapping("/me")
+    public Optional<Account> getAccountByMe(@RequestHeader(value = "X-User-Id", required = false) String userIdString) {
+        try {
+            Long accountId = Long.valueOf(userIdString);
+            log.info("get user by id: " + accountId);
+            return accountService.getAccountById(accountId);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     @PostMapping("/ids")
     public List<Account> getAccountsByIds(@RequestBody List<Long> ids) {
         return accountService.getAccountsByIds(ids);
     }
 
-    @GetMapping("/search")
-    public Page<Account> searchAccounts(
-            @RequestParam(value = "keyword", required = false, defaultValue = "") String keyword,
-            @RequestParam(value = "field", required = false, defaultValue = "all") String field,
-            Pageable pageable) {
-        return accountService.searchAccounts(keyword, field, pageable);
-    }
-
     @PostMapping
     public Account createAccount(@Valid @RequestBody Account account) {
-        Account savedAccount = accountService.saveAccount(account);
+        Account savedAccount = accountService.createAccount(account);
         return savedAccount;
     }
 
     @PutMapping("/{id}")
     public Account updateAccount(@PathVariable Long id, @Valid @RequestBody Account account) {
-        Optional<Account> existingAccount = accountService.getAccountById(id);
-        if (existingAccount.isEmpty()) {
-            throw new IllegalArgumentException("Account not found");
-        }
-
-        account.setId(id);
-
-        // Kiểm tra CCCD trùng lặp (trừ chính nó)
-        Optional<Account> accountWithSameCccd = accountService.findByCccd(account.getCccd());
-        if (accountWithSameCccd.isPresent() && !accountWithSameCccd.get().getId().equals(id)) {
-            throw new IllegalArgumentException("CCCD already exists");
-        }
-
-        // Kiểm tra email trùng lặp (nếu có email)
-        if (account.getEmail() != null && !account.getEmail().trim().isEmpty()) {
-            Optional<Account> accountWithSameEmail = accountService.findByEmail(account.getEmail());
-            if (accountWithSameEmail.isPresent() && !accountWithSameEmail.get().getId().equals(id)) {
-                throw new IllegalArgumentException("Email already exists");
-            }
-        }
-
-        // Nếu có password mới thì mã hóa, nếu không thì giữ nguyên
-        if (account.getPassword() != null && !account.getPassword().trim().isEmpty()) {
-            account.setPassword(passwordEncoder.encode(account.getPassword()));
-        } else {
-            // Giữ nguyên password cũ
-            account.setPassword(existingAccount.get().getPassword());
-        }
-
-        // Giữ nguyên visible từ account cũ
-        account.setVisible(existingAccount.get().getVisible());
-
-        return accountService.saveAccount(account);
-    }
-
-    @PutMapping("/assign-role")
-    public Account updateAccountRole(@RequestBody RoleDTO request) {
-        Optional<Account> existingAccount = accountService.getAccountById(request.getAccountId());
-        if (existingAccount.isEmpty()) {
-            throw new IllegalArgumentException("Account not found");
-        }
-
-        Role newRole;
-        try {
-            newRole = Role.valueOf(request.getRole().toUpperCase());
-        } catch (IllegalArgumentException | NullPointerException e) {
-            throw new IllegalArgumentException("Invalid role. Valid roles are: STUDENT, TEACHER, ADMIN");
-        }
-
-        Account account = existingAccount.get();
-        account.setRole(newRole);
-
-        Account updatedAccount = accountService.saveAccount(account);
-        log.info("Updated role for account ID {}: {} -> {}", request.getAccountId(), existingAccount.get().getRole(),
-                newRole);
-
-        return updatedAccount;
+        account.setId((id));
+        return accountService.updateAccount(account);
     }
 
     @DeleteMapping("/{id}")
     public String deleteAccount(@PathVariable Long id) {
-        Optional<Account> account = accountService.getAccountById(id);
-
-        if (account.isPresent()) {
-            accountService.deleteAccount(id); // Soft delete
-            kafkaProducer.sendAccount("account-deleted", account.get());
-            return "Tài khoản đã được xóa thành công!";
-        }
-
-        return "Không tìm thấy tài khoản!";
+        Boolean success = accountService.deleteAccount(id);
+        return success ? "Tài khoản đã được xóa thành công!" : "Không tìm thấy tài khoản!";
     }
+
+    @GetMapping("/search")
+    public Page<Account> searchAccounts(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "role", required = false) Role role,
+            @RequestParam(value = "positionIds", required = false) List<Long> positionIds,
+            @RequestParam(value = "birthdayFrom", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate birthdayFrom,
+            @RequestParam(value = "birthdayTo", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate birthdayTo,
+            Pageable pageable) {
+
+        AccountSearchDTO searchDTO = new AccountSearchDTO();
+        searchDTO.setKeyword(keyword);
+        searchDTO.setRole(role);
+        searchDTO.setPositionIds(positionIds);
+        searchDTO.setBirthdayFrom(birthdayFrom);
+        searchDTO.setBirthdayTo(birthdayTo);
+        System.out.println(searchDTO);
+
+        return accountService.universalSearch(searchDTO, pageable);
+    }
+
 }

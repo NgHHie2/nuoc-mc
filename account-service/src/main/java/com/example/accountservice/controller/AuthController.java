@@ -20,11 +20,13 @@ import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.model.AccountPosition;
 import com.example.accountservice.service.AccountService;
+import com.example.accountservice.service.RedisTokenService;
 import com.example.accountservice.service.AccountPositionService;
 import com.example.accountservice.util.JwtUtil;
 import com.example.accountservice.util.UsernameGenerator;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +40,9 @@ public class AuthController {
 
     @Autowired
     private AccountService accountService;
+
+    @Autowired
+    private RedisTokenService redisTokenService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -54,70 +59,78 @@ public class AuthController {
     @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
 
-    @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody Account account) {
-        try {
-            // Kiểm tra trùng lặp CCCD
-            if (accountService.existsByCccd(account.getCccd())) {
-                return ResponseEntity.badRequest().body(Map.of("error", "CCCD already exists"));
-            }
+    @Autowired
+    private HttpServletRequest request;
 
-            // Kiểm tra trùng lặp email
-            if (accountService.existsByEmail(account.getEmail())) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Email already exists"));
-            }
+    // @PostMapping("/register")
+    // public ResponseEntity<?> register(@Valid @RequestBody Account account) {
+    // try {
+    // // Kiểm tra trùng lặp CCCD
+    // if (accountService.existsByCccd(account.getCccd())) {
+    // return ResponseEntity.badRequest().body(Map.of("error", "CCCD already
+    // exists"));
+    // }
 
-            // Tạo username tự động từ họ tên
-            String generatedUsername = usernameGenerator.generateUsername(
-                    account.getFirstName(),
-                    account.getLastName());
-            account.setUsername(generatedUsername);
+    // // Kiểm tra trùng lặp email
+    // if (accountService.existsByEmail(account.getEmail())) {
+    // return ResponseEntity.badRequest().body(Map.of("error", "Email already
+    // exists"));
+    // }
 
-            // Set password mặc định nếu không có
-            if (account.getPassword() == null || account.getPassword().trim().isEmpty()) {
-                account.setPassword(usernameGenerator.getDefaultPassword());
-            }
+    // // Tạo username tự động từ họ tên
+    // String generatedUsername = usernameGenerator.generateUsername(
+    // account.getFirstName(),
+    // account.getLastName());
+    // account.setUsername(generatedUsername);
 
-            // Mã hóa password
-            account.setPassword(passwordEncoder.encode(account.getPassword()));
+    // // Set password mặc định nếu không có
+    // if (account.getPassword() == null || account.getPassword().trim().isEmpty())
+    // {
+    // account.setPassword(usernameGenerator.getDefaultPassword());
+    // }
 
-            // Set role mặc định
-            if (account.getRole() == null) {
-                account.setRole(Role.STUDENT);
-            }
+    // // Mã hóa password
+    // account.setPassword(passwordEncoder.encode(account.getPassword()));
 
-            Account savedAccount = accountService.saveAccount(account);
-            applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
+    // // Set role mặc định
+    // if (account.getRole() == null) {
+    // account.setRole(Role.STUDENT);
+    // }
 
-            // Lấy positions của user
-            List<Long> positions = getPositionsByAccount(savedAccount.getId());
+    // Account savedAccount = accountService.saveAccount(account);
+    // applicationEventPublisher.publishEvent(new
+    // UserRegisteredEvent(savedAccount));
 
-            String token = jwtUtil.generateToken(savedAccount.getId(),
-                    savedAccount.getRole(), positions);
+    // // Lấy positions của user
+    // List<Long> positions = getPositionsByAccount(savedAccount.getId());
 
-            // Log thông tin JWT (bao gồm JWT ID)
-            log.info("User registered successfully: {} with username: {}",
-                    savedAccount.getFirstName() + " " + savedAccount.getLastName(),
-                    savedAccount.getUsername());
+    // String token = jwtUtil.generateToken(savedAccount.getId(),
+    // savedAccount.getRole(), positions);
 
-            // Log JWT ID cho debugging
-            String jwtId = jwtUtil.getJwtIdFromToken(token);
-            log.info("Generated JWT ID for user {}: {}", savedAccount.getUsername(), jwtId);
+    // // Log thông tin JWT (bao gồm JWT ID)
+    // log.info("User registered successfully: {} with username: {}",
+    // savedAccount.getFirstName() + " " + savedAccount.getLastName(),
+    // savedAccount.getUsername());
 
-            return ResponseEntity.ok(Map.of(
-                    "token", token,
-                    "jwtId", jwtId,
-                    "userId", savedAccount.getId(),
-                    "username", savedAccount.getUsername(),
-                    "role", savedAccount.getRole().name(),
-                    "positions", positions));
+    // // Log JWT ID cho debugging
+    // String jwtId = jwtUtil.getJwtIdFromToken(token);
+    // log.info("Generated JWT ID for user {}: {}", savedAccount.getUsername(),
+    // jwtId);
 
-        } catch (Exception e) {
-            log.error("Registration failed: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Registration failed", "message", e.getMessage()));
-        }
-    }
+    // return ResponseEntity.ok(Map.of(
+    // "token", token,
+    // "jwtId", jwtId,
+    // "userId", savedAccount.getId(),
+    // "username", savedAccount.getUsername(),
+    // "role", savedAccount.getRole().name(),
+    // "positions", positions));
+
+    // } catch (Exception e) {
+    // log.error("Registration failed: {}", e.getMessage());
+    // return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+    // .body(Map.of("error", "Registration failed", "message", e.getMessage()));
+    // }
+    // }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Account loginRequest) {
@@ -149,6 +162,8 @@ public class AuthController {
             // Log full token info for debugging
             jwtUtil.logTokenInfo(token);
 
+            redisTokenService.saveTokenInfo(jwtId, account.getId(), account.getRole(), positions);
+
             return ResponseEntity.ok(Map.of(
                     "token", token,
                     "jwtId", jwtId,
@@ -161,6 +176,27 @@ public class AuthController {
             log.error("Login failed: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Login failed", "message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout() {
+        String userIdHeader = request.getHeader("X-User-Id");
+
+        if (userIdHeader == null || userIdHeader.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Missing X-User-Id header"));
+        }
+
+        try {
+            Long accountId = Long.valueOf(userIdHeader);
+            redisTokenService.revokeToken(accountId);
+            return ResponseEntity.ok(Map.of("message", "Logout successful"));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid X-User-Id format"));
+        } catch (Exception e) {
+            log.error("Logout failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Logout failed", "message", e.getMessage()));
         }
     }
 

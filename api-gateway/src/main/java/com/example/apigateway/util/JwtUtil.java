@@ -30,7 +30,7 @@ public class JwtUtil {
     /**
      * Lấy userId từ token
      */
-    public Integer getUserIdFromToken(String token) {
+    public Long getUserIdFromToken(String token) {
         return jwtTokenProvider.getUserIdFromToken(token);
     }
 

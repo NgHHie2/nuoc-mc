@@ -8,6 +8,8 @@ import com.example.accountservice.model.AccountPosition;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.model.Position;
 import com.example.accountservice.repository.AccountPositionRepository;
+import com.example.accountservice.repository.AccountRepository;
+import com.example.accountservice.repository.PositionRepository;
 import com.example.accountservice.service.AccountService;
 import com.example.accountservice.service.PositionService;
 
@@ -18,30 +20,30 @@ public class AccountPositionService {
     private AccountPositionRepository accountPositionRepository;
 
     @Autowired
-    private AccountService accountService;
+    private AccountRepository accountRepository;
 
     @Autowired
-    private PositionService positionService;
+    private PositionRepository positionRepository;
 
     public List<AccountPosition> getPositionsByAccount(Long accountId) {
-        Optional<Account> account = accountService.getAccountById(accountId);
+        Optional<Account> account = accountRepository.findById(accountId);
         if (account.isEmpty()) {
             throw new IllegalArgumentException("Account not found");
         }
-        return accountPositionRepository.findByAccountAndVisible(account.get(), 1);
+        return accountPositionRepository.findByAccount(account.get());
     }
 
     public List<AccountPosition> getAccountsByPosition(Long positionId) {
-        Optional<Position> position = positionService.getPositionById(positionId);
+        Optional<Position> position = positionRepository.findById(positionId);
         if (position.isEmpty()) {
             throw new IllegalArgumentException("Position not found");
         }
-        return accountPositionRepository.findByPositionAndVisible(position.get(), 1);
+        return accountPositionRepository.findByPosition(position.get());
     }
 
     public AccountPosition assignPosition(Long accountId, Long positionId) {
-        Optional<Account> account = accountService.getAccountById(accountId);
-        Optional<Position> position = positionService.getPositionById(positionId);
+        Optional<Account> account = accountRepository.findById(accountId);
+        Optional<Position> position = positionRepository.findById(positionId);
 
         if (account.isEmpty()) {
             throw new IllegalArgumentException("Account not found");
@@ -51,33 +53,25 @@ public class AccountPositionService {
         }
 
         // Kiểm tra đã tồn tại chưa
-        if (accountPositionRepository.existsByAccountAndPositionAndVisible(account.get(), position.get(), 1)) {
+        if (accountPositionRepository.existsByAccountAndPosition(account.get(), position.get())) {
             throw new IllegalArgumentException("Account already has this position");
         }
 
         AccountPosition accountPosition = new AccountPosition();
         accountPosition.setAccount(account.get());
         accountPosition.setPosition(position.get());
-        accountPosition.setVisible(1);
 
         return accountPositionRepository.save(accountPosition);
     }
 
     public void removePosition(Long accountId, Long positionId) {
-        Optional<Account> account = accountService.getAccountById(accountId);
-        Optional<Position> position = positionService.getPositionById(positionId);
+        Optional<Account> account = accountRepository.findById(accountId);
+        Optional<Position> position = positionRepository.findById(positionId);
 
         if (account.isEmpty() || position.isEmpty()) {
             throw new IllegalArgumentException("Account or Position not found");
         }
 
-        List<AccountPosition> positions = accountPositionRepository.findByAccountAndVisible(account.get(), 1);
-        for (AccountPosition ap : positions) {
-            if (ap.getPosition().getId().equals(positionId)) {
-                ap.setVisible(0);
-                accountPositionRepository.save(ap);
-                break;
-            }
-        }
+        accountPositionRepository.deleteByAccountAndPosition(account.get(), position.get());
     }
 }

@@ -1,5 +1,6 @@
 package com.example.accountservice.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 
 @Repository
@@ -29,38 +31,48 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
         boolean existsByUsernameAndVisible(String username, Integer visible);
 
-        Page<Account> findByUsernameContainingIgnoreCaseAndVisible(String username, Integer visible, Pageable pageable);
-
         // Email queries
         Optional<Account> findByEmailAndVisible(String email, Integer visible);
 
         boolean existsByEmailAndVisible(String email, Integer visible);
-
-        Page<Account> findByEmailContainingIgnoreCaseAndVisible(String email, Integer visible, Pageable pageable);
 
         // CCCD queries
         Optional<Account> findByCccdAndVisible(String cccd, Integer visible);
 
         boolean existsByCccdAndVisible(String cccd, Integer visible);
 
-        Page<Account> findByCccdContainingAndVisible(String cccd, Integer visible, Pageable pageable);
-
         // Search queries
-        Page<Account> findByFirstNameContainingIgnoreCaseAndVisible(String firstName, Integer visible,
-                        Pageable pageable);
+        @Query("SELECT DISTINCT a FROM Account a " +
+                        "LEFT JOIN a.accountPositions ap " +
+                        "WHERE a.visible = :visible " +
 
-        Page<Account> findByLastNameContainingIgnoreCaseAndVisible(String lastName, Integer visible, Pageable pageable);
+                        // Keyword search (optional) - with explicit CAST for PostgreSQL
+                        "AND (:keyword IS NULL OR " +
+                        "    LOWER(CAST(a.username AS string)) LIKE LOWER(:keyword) OR " +
+                        "    LOWER(CAST(a.firstName AS string)) LIKE LOWER(:keyword) OR " +
+                        "    LOWER(CAST(a.lastName AS string)) LIKE LOWER(:keyword) OR " +
+                        "    LOWER(CAST(CONCAT(a.firstName, ' ', a.lastName) AS string)) LIKE LOWER(:keyword) OR " +
+                        "    LOWER(CAST(CONCAT(a.lastName, ' ', a.firstName) AS string)) LIKE LOWER(:keyword) OR " +
+                        "    CAST(a.phoneNumber AS string) LIKE :keyword OR " +
+                        "    LOWER(CAST(a.email AS string)) LIKE LOWER(:keyword) OR " +
+                        "    CAST(a.cccd AS string) LIKE :keyword) " +
 
-        Page<Account> findByPhoneNumberContainingAndVisible(String phoneNumber, Integer visible, Pageable pageable);
+                        // Role filter (optional)
+                        "AND (:role IS NULL OR a.role = :role) " +
 
-        // Global search query
-        @Query("SELECT a FROM Account a WHERE a.visible = :visible AND " +
-                        "(LOWER(a.firstName) LIKE LOWER(:keyword) OR " +
-                        "LOWER(a.lastName) LIKE LOWER(:keyword) OR " +
-                        "LOWER(a.username) LIKE LOWER(:keyword) OR " +
-                        "LOWER(a.email) LIKE LOWER(:keyword) OR " +
-                        "a.cccd LIKE :keyword OR " +
-                        "a.phoneNumber LIKE :keyword)")
-        Page<Account> searchByKeywordAndVisible(@Param("keyword") String keyword, @Param("visible") Integer visible,
+                        // Position filter (optional) - removed visible checks
+                        "AND (:#{#positionIds == null or #positionIds.isEmpty()} = true OR " +
+                        "    ap.position.id IN :positionIds) " +
+
+                        // Birthday range filter (optional)
+                        "AND (:birthdayFrom IS NULL OR a.birthDay >= :birthdayFrom) " +
+                        "AND (:birthdayTo IS NULL OR a.birthDay <= :birthdayTo)")
+        Page<Account> universalSearch(
+                        @Param("keyword") String keyword,
+                        @Param("role") Role role,
+                        @Param("positionIds") List<Long> positionIds,
+                        @Param("birthdayFrom") LocalDateTime birthdayFrom,
+                        @Param("birthdayTo") LocalDateTime birthdayTo,
+                        @Param("visible") Integer visible,
                         Pageable pageable);
 }

@@ -17,7 +17,7 @@ import java.util.List;
 @AllArgsConstructor
 public class CustomUserDetail implements UserDetails {
 
-    private Integer userId;
+    private Long userId;
     private String userIdStr; // Subject của JWT (userId dưới dạng string)
     private List<Long> positions; // Mảng position IDs
     private String userRole;
@@ -26,7 +26,7 @@ public class CustomUserDetail implements UserDetails {
     private String password;
 
     // Constructor không cần password (vì API Gateway chỉ decode JWT)
-    public CustomUserDetail(Integer userId, String userIdStr, List<Long> positions, String userRole) {
+    public CustomUserDetail(Long userId, String userIdStr, List<Long> positions, String userRole) {
         this.userId = userId;
         this.userIdStr = userIdStr;
         this.positions = positions;
