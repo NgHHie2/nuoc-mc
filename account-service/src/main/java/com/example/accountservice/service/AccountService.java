@@ -184,23 +184,31 @@ public class AccountService {
     public Page<Account> universalSearch(AccountSearchDTO searchDTO, Pageable pageable) {
 
         // Chuẩn bị parameters
-        String keyword = prepareKeyword(searchDTO.getKeyword());
+        String keyword = prepareKeywordForCaseInsensitive(searchDTO.getKeyword());
         Role role = searchDTO.getRole();
         List<Long> positionIds = cleanPositionIds(searchDTO.getPositionIds());
+        boolean positionsEmpty = (positionIds == null || positionIds.isEmpty());
         LocalDateTime birthdayFrom = convertToDateTime(searchDTO.getBirthdayFrom(), true);
         LocalDateTime birthdayTo = convertToDateTime(searchDTO.getBirthdayTo(), false);
 
+        // Đảm bảo positionIds không null để tránh parameter type issue
+        if (positionIds == null) {
+            positionIds = List.of(); // Empty list thay vì null
+        }
+        System.out.println(birthdayFrom);
+        System.out.println(birthdayTo);
         // Gọi 1 query duy nhất xử lý tất cả cases
         return accountRepository.universalSearch(
-                keyword, role, positionIds, birthdayFrom, birthdayTo, 1, pageable);
+                keyword, role, positionIds, positionsEmpty, birthdayFrom, birthdayTo, 1, pageable);
     }
 
     // ===================== HELPER METHODS =====================
 
     /**
-     * Chuẩn bị keyword cho search
+     * Chuẩn bị keyword cho search case-insensitive
+     * Tạo multiple variations của keyword để match với data trong DB
      */
-    private String prepareKeyword(String keyword) {
+    private String prepareKeywordForCaseInsensitive(String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
             return null;
         }
@@ -208,7 +216,8 @@ public class AccountService {
         String trimmed = keyword.trim();
 
         // Thêm wildcard cho partial matching
-        return "%" + trimmed + "%";
+        // Sử dụng lowercase vì sẽ search với cả uppercase và lowercase patterns
+        return "%" + trimmed.toLowerCase() + "%";
     }
 
     /**
@@ -222,7 +231,7 @@ public class AccountService {
         // Remove null và invalid IDs
         positionIds.removeIf(id -> id == null || id <= 0);
 
-        return positionIds.isEmpty() ? null : positionIds;
+        return positionIds.isEmpty() ? List.of(-1L) : positionIds;
     }
 
     /**

@@ -42,37 +42,38 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
         boolean existsByCccdAndVisible(String cccd, Integer visible);
 
         // Search queries
-        @Query("SELECT DISTINCT a FROM Account a " +
-                        "LEFT JOIN a.accountPositions ap " +
-                        "WHERE a.visible = :visible " +
+        @Query("""
+                        SELECT DISTINCT a FROM Account a
+                        LEFT JOIN a.accountPositions ap
+                        WHERE a.visible = :visible
 
-                        // Keyword search (optional) - with explicit CAST for PostgreSQL
-                        "AND (:keyword IS NULL OR " +
-                        "    LOWER(CAST(a.username AS string)) LIKE LOWER(:keyword) OR " +
-                        "    LOWER(CAST(a.firstName AS string)) LIKE LOWER(:keyword) OR " +
-                        "    LOWER(CAST(a.lastName AS string)) LIKE LOWER(:keyword) OR " +
-                        "    LOWER(CAST(CONCAT(a.firstName, ' ', a.lastName) AS string)) LIKE LOWER(:keyword) OR " +
-                        "    LOWER(CAST(CONCAT(a.lastName, ' ', a.firstName) AS string)) LIKE LOWER(:keyword) OR " +
-                        "    CAST(a.phoneNumber AS string) LIKE :keyword OR " +
-                        "    LOWER(CAST(a.email AS string)) LIKE LOWER(:keyword) OR " +
-                        "    CAST(a.cccd AS string) LIKE :keyword) " +
+                        AND (
+                            :keyword IS NULL OR
+                            LOWER(a.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
+                            LOWER(a.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
+                            LOWER(a.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
+                            LOWER(CONCAT(a.firstName, ' ', a.lastName)) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
+                            LOWER(CONCAT(a.lastName, ' ', a.firstName)) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
+                            (a.phoneNumber IS NOT NULL AND a.phoneNumber LIKE CONCAT('%', :keyword, '%')) OR
+                            (a.email IS NOT NULL AND LOWER(a.email) LIKE LOWER(CONCAT('%', :keyword, '%'))) OR
+                            (a.cccd IS NOT NULL AND a.cccd LIKE CONCAT('%', :keyword, '%'))
+                        )
 
-                        // Role filter (optional)
-                        "AND (:role IS NULL OR a.role = :role) " +
+                        AND (:role IS NULL OR a.role = :role)
 
-                        // Position filter (optional) - removed visible checks
-                        "AND (:#{#positionIds == null or #positionIds.isEmpty()} = true OR " +
-                        "    ap.position.id IN :positionIds) " +
+                        AND (:positionsEmpty = true OR ap.position.id IN :positionIds)
 
-                        // Birthday range filter (optional)
-                        "AND (:birthdayFrom IS NULL OR a.birthDay >= :birthdayFrom) " +
-                        "AND (:birthdayTo IS NULL OR a.birthDay <= :birthdayTo)")
+                        AND (CAST(:birthdayFrom AS timestamp) IS NULL OR a.birthDay >= CAST(:birthdayFrom AS timestamp))
+                        AND (CAST(:birthdayTo AS timestamp) IS NULL OR a.birthDay <= CAST(:birthdayTo AS timestamp))
+                        """)
         Page<Account> universalSearch(
                         @Param("keyword") String keyword,
                         @Param("role") Role role,
                         @Param("positionIds") List<Long> positionIds,
+                        @Param("positionsEmpty") boolean positionsEmpty,
                         @Param("birthdayFrom") LocalDateTime birthdayFrom,
                         @Param("birthdayTo") LocalDateTime birthdayTo,
                         @Param("visible") Integer visible,
                         Pageable pageable);
+
 }
