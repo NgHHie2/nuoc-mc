@@ -8,7 +8,9 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -178,46 +180,28 @@ public class AccountService {
         return accountRepository.existsByCccdAndVisible(cccd, 1);
     }
 
-    /**
-     * Advanced search với nhiều criteria
-     */
     public Page<Account> universalSearch(AccountSearchDTO searchDTO, Pageable pageable) {
 
         // Chuẩn bị parameters
-        String keyword = prepareKeywordForCaseInsensitive(searchDTO.getKeyword());
+        String keyword = validateKeyword(searchDTO.getKeyword());
         Role role = searchDTO.getRole();
         List<Long> positionIds = cleanPositionIds(searchDTO.getPositionIds());
-        boolean positionsEmpty = (positionIds == null || positionIds.isEmpty());
-        LocalDateTime birthdayFrom = convertToDateTime(searchDTO.getBirthdayFrom(), true);
-        LocalDateTime birthdayTo = convertToDateTime(searchDTO.getBirthdayTo(), false);
 
-        // Đảm bảo positionIds không null để tránh parameter type issue
-        if (positionIds == null) {
-            positionIds = List.of(); // Empty list thay vì null
-        }
-        System.out.println(birthdayFrom);
-        System.out.println(birthdayTo);
-        // Gọi 1 query duy nhất xử lý tất cả cases
-        return accountRepository.universalSearch(
-                keyword, role, positionIds, positionsEmpty, birthdayFrom, birthdayTo, 1, pageable);
+        if (keyword == null)
+            return accountRepository.search(role, positionIds, pageable);
+        return accountRepository.universalSearch(keyword, role, positionIds, pageable);
     }
 
     // ===================== HELPER METHODS =====================
 
-    /**
-     * Chuẩn bị keyword cho search case-insensitive
-     * Tạo multiple variations của keyword để match với data trong DB
-     */
-    private String prepareKeywordForCaseInsensitive(String keyword) {
+    private String validateKeyword(String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
             return null;
         }
 
         String trimmed = keyword.trim();
 
-        // Thêm wildcard cho partial matching
-        // Sử dụng lowercase vì sẽ search với cả uppercase và lowercase patterns
-        return "%" + trimmed.toLowerCase() + "%";
+        return trimmed.toLowerCase();
     }
 
     /**
@@ -231,37 +215,7 @@ public class AccountService {
         // Remove null và invalid IDs
         positionIds.removeIf(id -> id == null || id <= 0);
 
-        return positionIds.isEmpty() ? List.of(-1L) : positionIds;
+        return positionIds.isEmpty() ? null : positionIds;
     }
 
-    /**
-     * Convert LocalDate to LocalDateTime for database query
-     */
-    private LocalDateTime convertToDateTime(LocalDate date, boolean isStartOfDay) {
-        if (date == null) {
-            return null;
-        }
-
-        return isStartOfDay ? date.atStartOfDay() : date.atTime(23, 59, 59);
-    }
-
-    /**
-     * Validate search criteria
-     */
-    public void validateSearchCriteria(AccountSearchDTO searchDTO) {
-        // Clean position IDs
-        if (searchDTO.getPositionIds() != null) {
-            searchDTO.getPositionIds().removeIf(id -> id == null || id <= 0);
-            if (searchDTO.getPositionIds().isEmpty()) {
-                searchDTO.setPositionIds(null);
-            }
-        }
-
-        // Validate birthday range
-        if (searchDTO.getBirthdayFrom() != null && searchDTO.getBirthdayTo() != null) {
-            if (searchDTO.getBirthdayFrom().isAfter(searchDTO.getBirthdayTo())) {
-                throw new IllegalArgumentException("Birthday 'from' date must be before 'to' date");
-            }
-        }
-    }
 }

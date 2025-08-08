@@ -98,17 +98,12 @@ public class AccountController {
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "role", required = false) Role role,
             @RequestParam(value = "positionIds", required = false) List<Long> positionIds,
-            @RequestParam(value = "birthdayFrom", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate birthdayFrom,
-            @RequestParam(value = "birthdayTo", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate birthdayTo,
             Pageable pageable) {
 
         AccountSearchDTO searchDTO = new AccountSearchDTO();
         searchDTO.setKeyword(keyword);
         searchDTO.setRole(role);
         searchDTO.setPositionIds(positionIds);
-        searchDTO.setBirthdayFrom(birthdayFrom);
-        searchDTO.setBirthdayTo(birthdayTo);
-        System.out.println(searchDTO);
 
         return accountService.universalSearch(searchDTO, pageable);
     }
