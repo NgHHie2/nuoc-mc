@@ -6,7 +6,10 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -98,12 +101,14 @@ public class AccountController {
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "role", required = false) Role role,
             @RequestParam(value = "positionIds", required = false) List<Long> positionIds,
+            @RequestParam(value = "searchFields", required = false) List<String> searchFields,
             Pageable pageable) {
 
         AccountSearchDTO searchDTO = new AccountSearchDTO();
         searchDTO.setKeyword(keyword);
         searchDTO.setRole(role);
         searchDTO.setPositionIds(positionIds);
+        searchDTO.setSearchFields(searchFields);
 
         return accountService.universalSearch(searchDTO, pageable);
     }

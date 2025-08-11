@@ -8,11 +8,8 @@ import java.util.List;
 
 @Data
 public class AccountSearchDTO {
-
-    // Keyword search (tìm đồng thời: username, name, phone, email, cccd, birthday)
     private String keyword;
-
-    // Role filter (single choice)
     private Role role;
     private List<Long> positionIds;
+    private List<String> searchFields;
 }

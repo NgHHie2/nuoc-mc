@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -11,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.JpaSort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +22,7 @@ import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.repository.AccountRepository;
 import com.example.accountservice.repository.RedisTokenRepository;
+import com.example.accountservice.specification.AccountSpecification;
 import com.example.accountservice.util.UsernameGenerator;
 import com.example.accountservice.util.listener.event.UserDeletedEvent;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
@@ -181,15 +185,13 @@ public class AccountService {
     }
 
     public Page<Account> universalSearch(AccountSearchDTO searchDTO, Pageable pageable) {
+        // Validate input
+        searchDTO.setKeyword(validateKeyword(searchDTO.getKeyword()));
+        searchDTO.setPositionIds(cleanPositionIds(searchDTO.getPositionIds()));
+        searchDTO.setSearchFields(validateSearchFields(searchDTO.getSearchFields()));
 
-        // Chuẩn bị parameters
-        String keyword = validateKeyword(searchDTO.getKeyword());
-        Role role = searchDTO.getRole();
-        List<Long> positionIds = cleanPositionIds(searchDTO.getPositionIds());
-
-        if (keyword == null)
-            return accountRepository.search(role, positionIds, pageable);
-        return accountRepository.universalSearch(keyword, role, positionIds, pageable);
+        Specification<Account> spec = AccountSpecification.build(searchDTO);
+        return accountRepository.findAll(spec, pageable);
     }
 
     // ===================== HELPER METHODS =====================
@@ -216,6 +218,22 @@ public class AccountService {
         positionIds.removeIf(id -> id == null || id <= 0);
 
         return positionIds.isEmpty() ? null : positionIds;
+    }
+
+    private List<String> validateSearchFields(List<String> searchFields) {
+        if (searchFields == null || searchFields.isEmpty()) {
+            return null;
+        }
+
+        Set<String> allowedFields = Set.of(
+                "username", "firstName", "lastName", "fullName",
+                "phoneNumber", "email", "cccd");
+
+        return searchFields.stream()
+                .filter(field -> field != null && allowedFields.contains(field.trim()))
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.toList());
     }
 
 }

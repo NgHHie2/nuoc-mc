@@ -8,6 +8,7 @@ import org.antlr.v4.runtime.atn.SemanticContext.AND;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,7 +17,7 @@ import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 
 @Repository
-public interface AccountRepository extends JpaRepository<Account, Long> {
+public interface AccountRepository extends JpaRepository<Account, Long>, JpaSpecificationExecutor<Account> {
 
     // Basic queries with visible filter
     Page<Account> findByVisible(Integer visible, Pageable pageable);
@@ -41,42 +42,5 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     Optional<Account> findByCccdAndVisible(String cccd, Integer visible);
 
     boolean existsByCccdAndVisible(String cccd, Integer visible);
-
-    // Search queries
-    @Query("""
-            SELECT DISTINCT a FROM Account a
-            LEFT JOIN a.accountPositions ap
-            WHERE a.visible = 1
-            AND (:role IS NULL OR a.role = :role)
-            AND (:positionIds IS NULL OR ap.position.id IN :positionIds)
-            """)
-    Page<Account> search(
-            @Param("role") Role role,
-            @Param("positionIds") List<Long> positionIds,
-            Pageable pageable);
-
-    @Query("""
-            SELECT DISTINCT a FROM Account a
-            LEFT JOIN a.accountPositions ap
-            WHERE a.visible = 1
-            AND (
-                :keyword IS NULL OR
-                LOWER(a.username) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-                LOWER(a.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-                LOWER(a.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-                LOWER(CONCAT(a.firstName, ' ', a.lastName)) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-                LOWER(CONCAT(a.lastName, ' ', a.firstName)) LIKE LOWER(CONCAT('%', :keyword, '%')) OR
-                (a.phoneNumber IS NOT NULL AND a.phoneNumber LIKE CONCAT('%', :keyword, '%')) OR
-                (a.email IS NOT NULL AND LOWER(a.email) LIKE LOWER(CONCAT('%', :keyword, '%'))) OR
-                (a.cccd IS NOT NULL AND a.cccd LIKE CONCAT('%', :keyword, '%'))
-            )
-            AND (:role IS NULL OR a.role = :role)
-            AND (:positionIds IS NULL OR ap.position.id IN :positionIds)
-            """)
-    Page<Account> universalSearch(
-            @Param("keyword") String keyword,
-            @Param("role") Role role,
-            @Param("positionIds") List<Long> positionIds,
-            Pageable pageable);
 
 }
