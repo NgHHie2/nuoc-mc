@@ -3,7 +3,6 @@ package com.example.accountservice.dto;
 import com.example.accountservice.enums.Role;
 import lombok.Data;
 
-import java.time.LocalDate;
 import java.util.List;
 
 @Data

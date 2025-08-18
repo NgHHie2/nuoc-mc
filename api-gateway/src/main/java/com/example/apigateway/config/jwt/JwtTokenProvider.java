@@ -45,26 +45,6 @@ public class JwtTokenProvider {
         return claims.get("userId", Long.class);
     }
 
-    public String getUserRoleFromToken(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-        return claims.get("userRole", String.class);
-    }
-
-    // Method để lấy positions
-    @SuppressWarnings("unchecked")
-    public List<Long> getPositionsFromToken(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-        return claims.get("positions", List.class);
-    }
-
     // Method để lấy JWT ID
     public String getJwtIdFromToken(String token) {
         Claims claims = Jwts.parser()
@@ -90,16 +70,14 @@ public class JwtTokenProvider {
 
     public Authentication getAuthentication(String token) {
         String userIdStr = getUsernameFromToken(token); // Subject là userId
-        String userRole = getUserRoleFromToken(token);
         Long userId = getUserIdFromToken(token);
-        List<Long> positions = getPositionsFromToken(token);
 
-        CustomUserDetail userDetail = new CustomUserDetail(userId, userIdStr, positions, userRole);
+        CustomUserDetail userDetail = new CustomUserDetail(userId, userIdStr);
 
         return new UsernamePasswordAuthenticationToken(
                 userDetail,
                 null,
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + userRole)));
+                null);
     }
 
     // Method để lấy tất cả thông tin từ token
@@ -115,12 +93,9 @@ public class JwtTokenProvider {
     public void logTokenInfo(String token) {
         try {
             Claims claims = getAllClaimsFromToken(token);
-            log.info("Token Info - JTI: {}, Subject: {}, UserId: {}, Role: {}, Positions: {}, Issued: {}, Expires: {}",
+            log.info("Token Info - JTI: {}, Subject: {}, UserId: {}, Issued: {}, Expires: {}",
                     claims.getId(),
                     claims.getSubject(),
-                    claims.get("userId"),
-                    claims.get("userRole"),
-                    claims.get("positions"),
                     claims.getIssuedAt(),
                     claims.getExpiration());
         } catch (Exception e) {

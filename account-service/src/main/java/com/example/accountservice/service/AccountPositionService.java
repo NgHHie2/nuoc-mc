@@ -10,8 +10,6 @@ import com.example.accountservice.model.Position;
 import com.example.accountservice.repository.AccountPositionRepository;
 import com.example.accountservice.repository.AccountRepository;
 import com.example.accountservice.repository.PositionRepository;
-import com.example.accountservice.service.AccountService;
-import com.example.accountservice.service.PositionService;
 
 @Service
 public class AccountPositionService {

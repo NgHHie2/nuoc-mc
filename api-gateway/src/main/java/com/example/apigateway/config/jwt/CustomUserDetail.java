@@ -19,24 +19,20 @@ public class CustomUserDetail implements UserDetails {
 
     private Long userId;
     private String userIdStr; // Subject của JWT (userId dưới dạng string)
-    private List<Long> positions; // Mảng position IDs
-    private String userRole;
 
     @JsonIgnore
     private String password;
 
     // Constructor không cần password (vì API Gateway chỉ decode JWT)
-    public CustomUserDetail(Long userId, String userIdStr, List<Long> positions, String userRole) {
+    public CustomUserDetail(Long userId, String userIdStr) {
         this.userId = userId;
         this.userIdStr = userIdStr;
-        this.positions = positions;
-        this.userRole = userRole;
         this.password = null; // API Gateway không cần password
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + userRole));
+        return null;
     }
 
     @Override
@@ -67,16 +63,5 @@ public class CustomUserDetail implements UserDetails {
     @Override
     public boolean isEnabled() {
         return true;
-    }
-
-    // Helper methods
-    public boolean hasPosition(Long positionId) {
-        return positions != null && positions.contains(positionId);
-    }
-
-    public boolean hasAnyPosition(List<Long> positionIds) {
-        if (positions == null || positionIds == null)
-            return false;
-        return positions.stream().anyMatch(positionIds::contains);
     }
 }

@@ -13,7 +13,6 @@ import com.example.accountservice.util.listener.event.UserDeletedEvent;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 import com.example.accountservice.util.listener.event.UserUpdatedEvent;
 import com.example.accountservice.kafka.KafkaProducer;
-import com.example.accountservice.model.AccountPosition;
 import com.example.accountservice.model.RedisTokenInfo;
 
 import lombok.extern.slf4j.Slf4j;
@@ -30,10 +29,11 @@ public class UserEventListener {
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handleUserRegistered(UserRegisteredEvent event) {
-        log.info("sending kafka event: account-created");
+    public void handleUserDeleted(UserDeletedEvent event) {
+        log.info("sending kafka event: account-deleted");
         try {
-            kafkaProducer.sendAccount("account-created", event.getAccount());
+            redisTokenRepository.deleteById(event.getAccount().getId());
+            kafkaProducer.sendAccount("account-deleted", event.getAccount());
             log.info("Kafka sent for: {}", event.getAccount().getUsername());
         } catch (Exception e) {
             log.error("Kafka failed: {}", e.getMessage());
@@ -42,11 +42,10 @@ public class UserEventListener {
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handleUserDeleted(UserDeletedEvent event) {
-        log.info("sending kafka event: account-deleted");
+    public void handleUserRegistered(UserRegisteredEvent event) {
+        log.info("sending kafka event: account-created");
         try {
-            redisTokenRepository.deleteById(event.getAccount().getId());
-            kafkaProducer.sendAccount("account-deleted", event.getAccount());
+            kafkaProducer.sendAccount("account-created", event.getAccount());
             log.info("Kafka sent for: {}", event.getAccount().getUsername());
         } catch (Exception e) {
             log.error("Kafka failed: {}", e.getMessage());

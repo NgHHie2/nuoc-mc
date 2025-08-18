@@ -1,7 +1,5 @@
 package com.example.accountservice.service;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -10,25 +8,24 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.example.accountservice.dto.AccountSearchDTO;
-import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.repository.AccountRepository;
-import com.example.accountservice.repository.RedisTokenRepository;
 import com.example.accountservice.specification.AccountSpecification;
 import com.example.accountservice.util.UsernameGenerator;
 import com.example.accountservice.util.listener.event.UserDeletedEvent;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
+import com.example.accountservice.util.listener.event.UserUpdatedEvent;
 
 import jakarta.transaction.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 public class AccountService {
 
@@ -36,23 +33,66 @@ public class AccountService {
     private AccountRepository accountRepository;
 
     @Autowired
-    private RedisTokenRepository redisTokenRepository;
+    private UsernameGenerator usernameGenerator;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
-    private UsernameGenerator usernameGenerator;
-
-    @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
-
-    public Page<Account> getAllAccount(Pageable pageable) {
-        return accountRepository.findByVisible(1, pageable);
-    }
 
     public Optional<Account> getAccountById(Long id) {
         return accountRepository.findByIdAndVisible(id, 1);
+    }
+
+    public Optional<Account> findByUsernameAndVisible(String username) {
+        return accountRepository.findByUsernameAndVisible(username, 1);
+    }
+
+    @Transactional
+    public Boolean deleteAccount(Long id) {
+        // Soft delete: set visible = 0
+        Optional<Account> account = accountRepository.findByIdAndVisible(id, 1);
+        if (account.isPresent()) {
+            Account acc = account.get();
+            acc.setVisible(0);
+            Account deletedAccount = accountRepository.save(acc);
+            log.info("Soft deleted account id: {}", id);
+            applicationEventPublisher.publishEvent(new UserDeletedEvent(deletedAccount));
+            return true;
+        }
+        return false;
+    }
+
+    @Transactional
+    public Account createAccount(Account account) {
+        if (existsByCccd(account.getCccd())) {
+            throw new IllegalArgumentException("CCCD already exists");
+        }
+
+        // Kiểm tra email trùng lặp (nếu có email)
+        if (existsByEmail(account.getEmail())) {
+            throw new IllegalArgumentException("Email already exists");
+        }
+
+        // Tạo username tự động nếu chưa có
+        if (account.getUsername() == null || account.getUsername().trim().isEmpty()) {
+            String generatedUsername = usernameGenerator.generateUsername(
+                    account.getFirstName(),
+                    account.getLastName());
+            account.setUsername(generatedUsername);
+        }
+
+        // Set password mặc định nếu chưa có
+        if (account.getPassword() == null || account.getPassword().trim().isEmpty()) {
+            account.setPassword(usernameGenerator.getDefaultPassword());
+        }
+
+        account.setPassword(passwordEncoder.encode(account.getPassword()));
+
+        Account savedAccount = saveAccount(account);
+        applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
+        return savedAccount;
     }
 
     @Transactional
@@ -88,43 +128,10 @@ public class AccountService {
         account.setVisible(existingAccount.get().getVisible());
 
         Account savedAccount = saveAccount(account);
-        // if(account.getRole() != existingAccount.get().getRole() )
+        applicationEventPublisher.publishEvent(new UserUpdatedEvent(savedAccount));
         return savedAccount;
     }
 
-    @Transactional
-    public Account createAccount(Account account) {
-        if (existsByCccd(account.getCccd())) {
-            throw new IllegalArgumentException("CCCD already exists");
-        }
-
-        // Kiểm tra email trùng lặp (nếu có email)
-        if (account.getEmail() != null && !account.getEmail().trim().isEmpty()
-                && existsByEmail(account.getEmail())) {
-            throw new IllegalArgumentException("Email already exists");
-        }
-
-        // Tạo username tự động nếu chưa có
-        if (account.getUsername() == null || account.getUsername().trim().isEmpty()) {
-            String generatedUsername = usernameGenerator.generateUsername(
-                    account.getFirstName(),
-                    account.getLastName());
-            account.setUsername(generatedUsername);
-        }
-
-        // Set password mặc định nếu chưa có
-        if (account.getPassword() == null || account.getPassword().trim().isEmpty()) {
-            account.setPassword(usernameGenerator.getDefaultPassword());
-        }
-
-        account.setPassword(passwordEncoder.encode(account.getPassword()));
-
-        Account savedAccount = saveAccount(account);
-        applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
-        return savedAccount;
-    }
-
-    @Transactional
     public Account saveAccount(Account account) {
         // Set visible = 1 nếu chưa có giá trị
         if (account.getVisible() == null) {
@@ -132,56 +139,6 @@ public class AccountService {
         }
 
         return accountRepository.save(account);
-    }
-
-    @Transactional
-    public Boolean deleteAccount(Long id) {
-        // Soft delete: set visible = 0
-        Optional<Account> account = accountRepository.findById(id);
-        if (account.isPresent()) {
-            Account acc = account.get();
-            acc.setVisible(0);
-            Account deletedAccount = accountRepository.save(acc);
-            applicationEventPublisher.publishEvent(new UserDeletedEvent(deletedAccount));
-            return true;
-        }
-        return false;
-    }
-
-    public List<Account> getAccountsByIds(List<Long> ids) {
-        return accountRepository.findAllByIdInAndVisible(ids, 1);
-    }
-
-    // Methods for authentication
-    public Optional<Account> findByUsername(String username) {
-        return accountRepository.findByUsername(username);
-    }
-
-    public Optional<Account> findByUsernameAndVisible(String username) {
-        return accountRepository.findByUsernameAndVisible(username, 1);
-    }
-
-    public Optional<Account> findByEmail(String email) {
-        return accountRepository.findByEmailAndVisible(email, 1);
-    }
-
-    public Optional<Account> findByCccd(String cccd) {
-        return accountRepository.findByCccdAndVisible(cccd, 1);
-    }
-
-    public boolean existsByUsername(String username) {
-        return accountRepository.existsByUsernameAndVisible(username, 1);
-    }
-
-    public boolean existsByEmail(String email) {
-        if (email == null || email.trim().isEmpty()) {
-            return false;
-        }
-        return accountRepository.existsByEmailAndVisible(email, 1);
-    }
-
-    public boolean existsByCccd(String cccd) {
-        return accountRepository.existsByCccdAndVisible(cccd, 1);
     }
 
     public Page<Account> universalSearch(AccountSearchDTO searchDTO, Pageable pageable) {
@@ -236,4 +193,22 @@ public class AccountService {
                 .collect(Collectors.toList());
     }
 
+    public boolean existsByCccd(String cccd) {
+        return accountRepository.existsByCccdAndVisible(cccd, 1);
+    }
+
+    public boolean existsByEmail(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            return false;
+        }
+        return accountRepository.existsByEmailAndVisible(email, 1);
+    }
+
+    public Optional<Account> findByCccd(String cccd) {
+        return accountRepository.findByCccdAndVisible(cccd, 1);
+    }
+
+    public Optional<Account> findByEmail(String email) {
+        return accountRepository.findByEmailAndVisible(email, 1);
+    }
 }

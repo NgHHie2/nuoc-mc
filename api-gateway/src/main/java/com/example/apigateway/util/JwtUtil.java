@@ -3,7 +3,6 @@ package com.example.apigateway.util;
 import com.example.apigateway.config.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -32,20 +31,6 @@ public class JwtUtil {
      */
     public Long getUserIdFromToken(String token) {
         return jwtTokenProvider.getUserIdFromToken(token);
-    }
-
-    /**
-     * Lấy userRole từ token
-     */
-    public String getUserRoleFromToken(String token) {
-        return jwtTokenProvider.getUserRoleFromToken(token);
-    }
-
-    /**
-     * Lấy positions từ token
-     */
-    public List<Long> getPositionsFromToken(String token) {
-        return jwtTokenProvider.getPositionsFromToken(token);
     }
 
     /**

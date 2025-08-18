@@ -72,20 +72,4 @@ public class RedisTokenService {
         }
     }
 
-    /**
-     * Update thông tin user trong tất cả token của họ (khi role/position thay đổi)
-     */
-    // public void updateUserTokens(Long accountId, Role newRole, List<Long>
-    // newPositions) {
-    // try {
-    // // Tìm tất cả token của user và update
-    // // Với Spring Data Redis, cần implement custom query hoặc dùng RedisTemplate
-    // log.info("Updated user tokens - AccountId: {}, NewRole: {}, NewPositions:
-    // {}",
-    // accountId, newRole, newPositions);
-    // } catch (Exception e) {
-    // log.error("Failed to update user tokens - AccountId: {}, Error: {}",
-    // accountId, e.getMessage());
-    // }
-    // }
 }

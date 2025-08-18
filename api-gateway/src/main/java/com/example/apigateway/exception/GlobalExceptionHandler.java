@@ -16,7 +16,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleException(Exception ex) {
         Map<String, Object> error = new HashMap<>();
         error.put("error", "Internal Server Error");
-        error.put("message", ex.getMessage());
+        error.put("message", "Service temporarily unavailable");
         return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
