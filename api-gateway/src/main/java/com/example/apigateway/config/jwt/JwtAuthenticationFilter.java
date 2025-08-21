@@ -40,7 +40,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     private static final List<String> EXCLUDED_PATHS = Arrays.asList(
             "/v3/api-docs", "/swagger-ui", "/webjars", "/swagger-resources", "/configuration",
             "/account-service/v3/api-docs", "/learn-service/v3/api-docs", "/stats-service/v3/api-docs",
-            "/account/login", "/account/register", "/account/validate-token",
+            "/account/login",
             "/actuator", "/favicon.ico", "/error");
 
     @Override

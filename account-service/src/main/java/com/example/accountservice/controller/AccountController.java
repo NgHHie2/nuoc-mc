@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.accountservice.annotation.RequireRole;
 import com.example.accountservice.dto.AccountSearchDTO;
+import com.example.accountservice.dto.PasswordChangeDTO;
 import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
@@ -68,13 +69,9 @@ public class AccountController {
 
     @GetMapping("/me")
     public Optional<Account> getAccountByMe(@RequestHeader(value = "X-User-Id", required = false) String userIdString) {
-        try {
-            Long accountId = Long.valueOf(userIdString);
-            log.info("get user by id: " + accountId);
-            return accountService.getAccountById(accountId);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        Long accountId = Long.valueOf(userIdString);
+        log.info("get user by id: " + accountId);
+        return accountService.getAccountById(accountId);
     }
 
     @PostMapping
@@ -90,4 +87,24 @@ public class AccountController {
         account.setId((id));
         return accountService.updateAccount(account);
     }
+
+    @PutMapping("/change-password/{id}")
+    @RequireRole({ Role.ADMIN })
+    public Boolean updatePasswordByAdmin(@PathVariable Long id,
+            @Valid @RequestBody PasswordChangeDTO passwordChangeDTO) {
+        return accountService.updatePasswordByAdmin(id, passwordChangeDTO);
+    }
+
+    @PutMapping("/change-password")
+    public Boolean updatePasswordByUser(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdString,
+            @Valid @RequestBody PasswordChangeDTO passwordChangeDTO) {
+
+        if (passwordChangeDTO.getOldPassword() == null || passwordChangeDTO.getOldPassword().isEmpty()) {
+            throw new IllegalArgumentException("Old password must not be empty");
+        }
+        Long accountId = Long.valueOf(userIdString);
+        return accountService.updatePasswordByUser(accountId, passwordChangeDTO);
+    }
+
 }

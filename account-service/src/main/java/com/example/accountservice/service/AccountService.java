@@ -14,14 +14,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.example.accountservice.dto.AccountSearchDTO;
+import com.example.accountservice.dto.PasswordChangeDTO;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.repository.AccountRepository;
 import com.example.accountservice.specification.AccountSpecification;
+import com.example.accountservice.util.ValidateUtil;
 import com.example.accountservice.util.UsernameGenerator;
 import com.example.accountservice.util.listener.event.UserDeletedEvent;
 import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 import com.example.accountservice.util.listener.event.UserUpdatedEvent;
 
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
@@ -47,6 +50,25 @@ public class AccountService {
 
     public Optional<Account> findByUsernameAndVisible(String username) {
         return accountRepository.findByUsernameAndVisible(username, 1);
+    }
+
+    public boolean existsByCccd(String cccd) {
+        return accountRepository.existsByCccdAndVisible(cccd, 1);
+    }
+
+    public boolean existsByEmail(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            return false;
+        }
+        return accountRepository.existsByEmailAndVisible(email, 1);
+    }
+
+    public Optional<Account> findByCccd(String cccd) {
+        return accountRepository.findByCccdAndVisible(cccd, 1);
+    }
+
+    public Optional<Account> findByEmail(String email) {
+        return accountRepository.findByEmailAndVisible(email, 1);
     }
 
     @Transactional
@@ -116,13 +138,8 @@ public class AccountService {
             }
         }
 
-        // Nếu có password mới thì mã hóa, nếu không thì giữ nguyên
-        if (account.getPassword() != null && !account.getPassword().trim().isEmpty()) {
-            account.setPassword(passwordEncoder.encode(account.getPassword()));
-        } else {
-            // Giữ nguyên password cũ
-            account.setPassword(existingAccount.get().getPassword());
-        }
+        // Giữ nguyên password cũ
+        account.setPassword(existingAccount.get().getPassword());
 
         // Giữ nguyên visible từ account cũ
         account.setVisible(existingAccount.get().getVisible());
@@ -130,6 +147,42 @@ public class AccountService {
         Account savedAccount = saveAccount(account);
         applicationEventPublisher.publishEvent(new UserUpdatedEvent(savedAccount));
         return savedAccount;
+    }
+
+    @Transactional
+    public Boolean updatePasswordByAdmin(Long accountId, PasswordChangeDTO passwordChangeDTO) {
+        Account account = getAccountById(accountId)
+                .orElseThrow(() -> new EntityNotFoundException("Account not found with id: " + accountId));
+
+        if (!passwordChangeDTO.getNewPassword().equals(passwordChangeDTO.getConfirmPassword())) {
+            throw new IllegalArgumentException("New password and confirm password do not match");
+        }
+
+        String encodedPassword = passwordEncoder.encode(passwordChangeDTO.getNewPassword());
+        account.setPassword(encodedPassword);
+        accountRepository.save(account);
+
+        return true;
+    }
+
+    @Transactional
+    public Boolean updatePasswordByUser(Long accountId, PasswordChangeDTO passwordChangeDTO) {
+        Account account = getAccountById(accountId)
+                .orElseThrow(() -> new EntityNotFoundException("Account not found with id: " + accountId));
+
+        if (!passwordEncoder.matches(passwordChangeDTO.getOldPassword(), account.getPassword())) {
+            throw new IllegalArgumentException("Old password is wrong");
+        }
+
+        if (!passwordChangeDTO.getNewPassword().equals(passwordChangeDTO.getConfirmPassword())) {
+            throw new IllegalArgumentException("New password and confirm password do not match");
+        }
+
+        String encodedPassword = passwordEncoder.encode(passwordChangeDTO.getNewPassword());
+        account.setPassword(encodedPassword);
+        accountRepository.save(account);
+
+        return true;
     }
 
     public Account saveAccount(Account account) {
@@ -143,72 +196,12 @@ public class AccountService {
 
     public Page<Account> universalSearch(AccountSearchDTO searchDTO, Pageable pageable) {
         // Validate input
-        searchDTO.setKeyword(validateKeyword(searchDTO.getKeyword()));
-        searchDTO.setPositionIds(cleanPositionIds(searchDTO.getPositionIds()));
-        searchDTO.setSearchFields(validateSearchFields(searchDTO.getSearchFields()));
+        searchDTO.setKeyword(ValidateUtil.validateKeyword(searchDTO.getKeyword()));
+        searchDTO.setPositionIds(ValidateUtil.cleanPositionIds(searchDTO.getPositionIds()));
+        searchDTO.setSearchFields(ValidateUtil.validateSearchFields(searchDTO.getSearchFields()));
 
         Specification<Account> spec = AccountSpecification.build(searchDTO);
         return accountRepository.findAll(spec, pageable);
     }
 
-    // ===================== HELPER METHODS =====================
-
-    private String validateKeyword(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            return null;
-        }
-
-        String trimmed = keyword.trim();
-
-        return trimmed.toLowerCase();
-    }
-
-    /**
-     * Clean và validate position IDs
-     */
-    private List<Long> cleanPositionIds(List<Long> positionIds) {
-        if (positionIds == null || positionIds.isEmpty()) {
-            return null;
-        }
-
-        // Remove null và invalid IDs
-        positionIds.removeIf(id -> id == null || id <= 0);
-
-        return positionIds.isEmpty() ? null : positionIds;
-    }
-
-    private List<String> validateSearchFields(List<String> searchFields) {
-        if (searchFields == null || searchFields.isEmpty()) {
-            return null;
-        }
-
-        Set<String> allowedFields = Set.of(
-                "username", "firstName", "lastName", "fullName",
-                "phoneNumber", "email", "cccd");
-
-        return searchFields.stream()
-                .filter(field -> field != null && allowedFields.contains(field.trim()))
-                .map(String::trim)
-                .distinct()
-                .collect(Collectors.toList());
-    }
-
-    public boolean existsByCccd(String cccd) {
-        return accountRepository.existsByCccdAndVisible(cccd, 1);
-    }
-
-    public boolean existsByEmail(String email) {
-        if (email == null || email.trim().isEmpty()) {
-            return false;
-        }
-        return accountRepository.existsByEmailAndVisible(email, 1);
-    }
-
-    public Optional<Account> findByCccd(String cccd) {
-        return accountRepository.findByCccdAndVisible(cccd, 1);
-    }
-
-    public Optional<Account> findByEmail(String email) {
-        return accountRepository.findByEmailAndVisible(email, 1);
-    }
 }

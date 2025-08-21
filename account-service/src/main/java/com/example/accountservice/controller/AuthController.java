@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.accountservice.dto.LoginDTO;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.model.AccountPosition;
 import com.example.accountservice.service.AccountService;
@@ -25,6 +26,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.transaction.Transactional;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -52,14 +54,10 @@ public class AuthController {
     private HttpServletRequest request;
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Account loginRequest, HttpServletResponse response) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginDTO loginRequest, HttpServletResponse response) {
         try {
             String username = loginRequest.getUsername();
             String password = loginRequest.getPassword();
-
-            if (username == null || username.trim().isEmpty() || password == null || password.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Username and password are required"));
-            }
 
             Optional<Account> accountOpt = accountService.findByUsernameAndVisible(username);
             if (accountOpt.isEmpty() || !passwordEncoder.matches(password, accountOpt.get().getPassword())) {

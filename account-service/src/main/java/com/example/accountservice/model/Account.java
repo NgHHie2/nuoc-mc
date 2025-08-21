@@ -51,6 +51,7 @@ public class Account {
 
     private Integer visible = 1; // 1: hiển thị, 0: đã xóa (soft delete)
 
+    @Enumerated(EnumType.STRING)
     private Role role;
 
     @OneToMany(mappedBy = "account", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
