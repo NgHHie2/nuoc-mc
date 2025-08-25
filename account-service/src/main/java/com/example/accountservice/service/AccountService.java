@@ -97,22 +97,19 @@ public class AccountService {
             throw new IllegalArgumentException("Email already exists");
         }
 
-        // Tạo username tự động nếu chưa có
-        if (account.getUsername() == null || account.getUsername().trim().isEmpty()) {
-            String generatedUsername = usernameGenerator.generateUsername(
-                    account.getFirstName(),
-                    account.getLastName());
-            account.setUsername(generatedUsername);
-        }
+        // Tạo username tự động theo format
+        String generatedUsername = usernameGenerator.generateUsername(
+                account.getFirstName(),
+                account.getLastName());
+        account.setUsername(generatedUsername);
 
-        // Set password mặc định nếu chưa có
-        if (account.getPassword() == null || account.getPassword().trim().isEmpty()) {
-            account.setPassword(usernameGenerator.getDefaultPassword());
-        }
-
-        account.setPassword(passwordEncoder.encode(account.getPassword()));
+        // Set password mặc định "123456Aa@"
+        String password = usernameGenerator.getDefaultPassword();
+        account.setPassword(passwordEncoder.encode(password));
 
         Account savedAccount = saveAccount(account);
+
+        // Bắn sự kiện sau khi commit
         applicationEventPublisher.publishEvent(new UserRegisteredEvent(savedAccount));
         return savedAccount;
     }

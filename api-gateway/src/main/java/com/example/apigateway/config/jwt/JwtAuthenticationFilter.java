@@ -47,15 +47,25 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
+        // THÊM: Chặn request nếu header chứa các trường không hợp lệ
+        HttpHeaders headers = exchange.getRequest().getHeaders();
+        if (headers.containsKey("X-User-Id") || headers.containsKey("X-User-Role")
+                || headers.containsKey("X-Positions")) {
+            return handleUnauthorized(exchange);
+        }
+
+        // Bỏ qua check filter
         if (shouldSkipAuthentication(path)) {
             return chain.filter(exchange);
         }
 
+        // Kiểm tra trong request có jwt không và kiểm tra chữ ký
         String token = resolveToken(exchange.getRequest());
         if (token == null || !jwtTokenProvider.validateToken(token)) {
             return handleUnauthorized(exchange);
         }
 
+        // Truy vấn redis lấy thông tin jwt và account theo accountId trong jwt
         Long accountId = jwtTokenProvider.getUserIdFromToken(token);
         Optional<RedisTokenInfo> redisTokenInfo = redisTokenService.getTokenInfo(accountId);
 
@@ -69,6 +79,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 ? tokenInfo.getPositions().stream().map(String::valueOf).collect(Collectors.joining(","))
                 : "";
 
+        // Set account info vào header của request trước khi forward xuống các services
         ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                 .header("X-User-Id", tokenInfo.getAccountId().toString())
                 .header("X-User-Role", tokenInfo.getRole())

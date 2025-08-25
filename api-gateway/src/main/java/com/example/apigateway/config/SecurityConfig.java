@@ -17,6 +17,11 @@ import java.util.Arrays;
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
+    /**
+     * Cấu hình Security Filter Chain cho WebFlux
+     * Tắt tất cả các authentication mặc định của Spring Security
+     * vì API Gateway sẽ xử lý authentication thông qua JWT filter riêng
+     */
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
@@ -32,6 +37,9 @@ public class SecurityConfig {
                 .build();
     }
 
+    /**
+     * Cấu hình CORS (Cross-Origin Resource Sharing)
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
