@@ -23,11 +23,9 @@ public class Account {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
     private String username; // Sẽ được tạo tự động
 
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @Size(min = 6, message = "Password must be at least 6 characters")
     private String password; // Mặc định là 123456Aa@
 
     @NotBlank(message = "First name is required")
