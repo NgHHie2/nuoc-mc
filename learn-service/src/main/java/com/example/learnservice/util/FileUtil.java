@@ -16,16 +16,23 @@ import javax.crypto.CipherOutputStream;
 import javax.crypto.spec.SecretKeySpec;
 
 import org.apache.commons.io.FilenameUtils;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.tika.Tika;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.apache.tika.metadata.Metadata;
+import org.apache.tika.metadata.XMPDM;
+import org.apache.tika.parser.AutoDetectParser;
+import org.apache.tika.parser.ParseContext;
+import org.apache.tika.sax.BodyContentHandler;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.example.learnservice.enums.DocumentFormat;
 import com.example.learnservice.model.Document;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Component
 public class FileUtil {
 
@@ -66,7 +73,7 @@ public class FileUtil {
         }
 
         Document document = new Document();
-        document.setName((sanitizedName));
+        document.setName(sanitizedName);
         DocumentFormat format = switch (detectedMimeType) {
             case "application/pdf" -> DocumentFormat.PDF;
             case "video/mp4", "video/avi", "video/quicktime", "video/x-msvideo" -> DocumentFormat.VIDEO;
@@ -76,6 +83,84 @@ public class FileUtil {
         document.setSize(file.getSize());
 
         return document;
+    }
+
+    public void analyzeFileContent(MultipartFile file, Document document) {
+        try {
+            if (document.getFormat() == DocumentFormat.PDF) {
+                // Phân tích PDF để lấy số trang
+                int pageCount = analyzePdfPages(file);
+                document.setPages(pageCount);
+                log.info("PDF analysis completed - Pages: {}", pageCount);
+            } else if (document.getFormat() == DocumentFormat.VIDEO) {
+                // Phân tích video để lấy duration (phút)
+                Integer durationMinutes = analyzeVideoDuration(file);
+                document.setMinutes(durationMinutes);
+                log.info("Video analysis completed - Duration: {} minutes", durationMinutes);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to analyze file content for {}: {}", document.getName(), e.getMessage());
+            // Không throw exception để không fail upload, chỉ log warning
+        }
+    }
+
+    private int analyzePdfPages(MultipartFile file) throws IOException {
+        try (InputStream inputStream = file.getInputStream();
+                PDDocument document = PDDocument.load(inputStream)) {
+            return document.getNumberOfPages();
+        } catch (Exception e) {
+            log.error("Failed to analyze PDF pages: {}", e.getMessage());
+            return 0; // Return 0 if analysis fails
+        }
+    }
+
+    private Integer analyzeVideoDuration(MultipartFile file) {
+        try (InputStream inputStream = file.getInputStream()) {
+            AutoDetectParser parser = new AutoDetectParser();
+            BodyContentHandler handler = new BodyContentHandler(-1); // No limit
+            Metadata metadata = new Metadata();
+            ParseContext parseContext = new ParseContext();
+
+            parser.parse(inputStream, handler, metadata, parseContext);
+
+            // Try to get duration from metadata
+            String duration = metadata.get(XMPDM.DURATION);
+            if (duration != null) {
+                try {
+                    // Duration might be in seconds, convert to minutes
+                    double durationSeconds = Double.parseDouble(duration);
+                    return (int) Math.ceil(durationSeconds / 60.0);
+                } catch (NumberFormatException e) {
+                    log.warn("Could not parse duration: {}", duration);
+                }
+            }
+
+            // Alternative metadata fields for duration
+            String[] durationFields = {
+                    "duration", "Duration", "DURATION",
+                    "xmpDM:duration", "Content-Duration"
+            };
+
+            for (String field : durationFields) {
+                String value = metadata.get(field);
+                if (value != null) {
+                    try {
+                        double seconds = Double.parseDouble(value);
+                        return (int) Math.ceil(seconds / 60.0);
+                    } catch (NumberFormatException e) {
+                        // Try next field
+                        continue;
+                    }
+                }
+            }
+
+            log.warn("Could not extract video duration from metadata");
+            return null;
+
+        } catch (Exception e) {
+            log.error("Failed to analyze video duration: {}", e.getMessage());
+            return null;
+        }
     }
 
     public String encryptFile(MultipartFile file, String originalFileName) throws Exception {

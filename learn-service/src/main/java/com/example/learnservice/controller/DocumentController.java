@@ -1,10 +1,12 @@
 package com.example.learnservice.controller;
 
 import com.example.learnservice.model.Document;
+import com.example.learnservice.service.DocumentService;
 import com.example.learnservice.util.FileUtil;
 
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import jakarta.servlet.http.HttpServletRequest;
 
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,24 +29,30 @@ public class DocumentController {
     @Autowired
     private FileUtil fileUtil;
 
+    @Autowired
+    private DocumentService documentService;
+
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
     public ResponseEntity<?> uploadFile(
-            @Parameter(description = "File to upload", content = @Content(mediaType = "multipart/form-data")) @RequestParam("file") MultipartFile file) {
+            @Parameter(description = "File to upload", content = @Content(mediaType = "multipart/form-data")) @RequestParam("file") MultipartFile file,
+            HttpServletRequest request) {
         try {
-            Document document = fileUtil.validateFile(file);
+            // Lấy User ID từ header
+            String userIdHeader = request.getHeader("X-User-Id");
+            Long userId = Long.valueOf(userIdHeader);
 
-            // Mã hóa và lưu file
-            String filePath = fileUtil.encryptFile(file, document.getName());
-            // Lưu luôn không mã hóa
-            // String filePath = fileUtil.uploadNotEncryptFile(file, document.getName());
-            document.setFilePath(filePath);
+            Document savedDocument = documentService.processAndSaveDocument(file, userId);
 
             // Trả về thông tin file
             Map<String, Object> response = new HashMap<>();
-            response.put("fileName", document.getName());
-            response.put("filePath", document.getFilePath());
-            response.put("fileSize", document.getSize());
-            response.put("fileType", document.getFormat());
+            response.put("id", savedDocument.getId());
+            response.put("code", savedDocument.getCode());
+            response.put("fileName", savedDocument.getName());
+            response.put("filePath", savedDocument.getFilePath());
+            response.put("fileSize", savedDocument.getSize());
+            response.put("fileType", savedDocument.getFormat());
+            response.put("pages", savedDocument.getPages());
+            response.put("minutes", savedDocument.getMinutes());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
