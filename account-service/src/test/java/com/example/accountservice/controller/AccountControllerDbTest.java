@@ -101,8 +101,9 @@ class AccountControllerDbTest {
 
     @Test
     void getAccountById_WithH2Database_Success() throws Exception {
+        System.out.println("hiephiephiep " + studentAccount.getId().toString());
         // When & Then
-        mockMvc.perform(get("/account/" + studentAccount.getId())
+        mockMvc.perform(get("/account/" + studentAccount.getId().toString())
                 .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(studentAccount.getId()))

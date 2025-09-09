@@ -36,3 +36,4 @@ application-prod.properties
 docker-compose.prod.yml
 
 logs
+uploads

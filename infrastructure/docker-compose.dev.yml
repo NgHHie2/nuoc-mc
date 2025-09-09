@@ -26,6 +26,29 @@ services:
     networks:
       - microservice-network
 
+  account-service:
+    image: account-service:latest
+    container_name: account-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - EUREKA_SERVER_HOST=eureka-server
+      - SPRING_DATA_REDIS_HOST=redis-shared
+      - SPRING_DATA_REDIS_PORT=6379
+      # Database connection cho Docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-account-dev:5432/accountservicedb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=1111
+      # Kafka connection cho Docker (nếu có)
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      - eureka-server
+      - postgres-account
+      - redis
+    networks:
+      - microservice-network
+
   # Account Service Database
   postgres-account:
     image: postgres:15
@@ -38,6 +61,21 @@ services:
       POSTGRES_PASSWORD: 1111
     volumes:
       - postgres_account_data:/var/lib/postgresql/data
+    networks:
+      - microservice-network
+
+  # Learn Service Database
+  postgres-learn:
+    image: postgres:15
+    container_name: postgres-learn-dev
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: learnservicedb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1111
+    volumes:
+      - postgres_learn_data:/var/lib/postgresql/data
     networks:
       - microservice-network
 
