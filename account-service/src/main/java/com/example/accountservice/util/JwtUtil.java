@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.example.accountservice.enums.Role;
+import com.example.accountservice.model.Account;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
@@ -28,7 +29,8 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
-    public String generateToken(Long userId) {
+    public String generateToken(Account account) {
+        Long userId = account.getId();
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpiration);
         String jwtId = UUID.randomUUID().toString(); // Tạo unique JWT ID
@@ -36,6 +38,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(userId.toString()) // Dùng userId làm subject thay vì username
                 .claim("userId", userId)
+                .claim("cccd", account.getCccd())
                 .id(jwtId) // Thêm JWT ID
                 .issuedAt(now)
                 .expiration(expiryDate)

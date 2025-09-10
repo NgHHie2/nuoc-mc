@@ -7,6 +7,7 @@ import com.example.learnservice.util.FileUtil;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
+@Slf4j
 @RestController
 @RequestMapping("/document")
 public class DocumentController {
@@ -61,24 +63,34 @@ public class DocumentController {
     }
 
     @GetMapping("/download/{fileName}")
-    public ResponseEntity<byte[]> downloadFile(@PathVariable String fileName) {
+    public ResponseEntity<byte[]> downloadFile(
+            @PathVariable String fileName,
+            HttpServletRequest request) {
         try {
+            log.info("X-CCCD: " + request.getHeader("X-CCCD"));
+            String cccd = request.getHeader("X-CCCD"); // thông tin để watermark
+
             // Sanitize filename
             String sanitizedFileName = FilenameUtils.getName(fileName);
-            Path filePath = Paths.get(uploadDir, sanitizedFileName);
+            Path filePath = Paths.get(uploadDir, "doc", sanitizedFileName);
 
             if (!Files.exists(filePath)) {
                 return ResponseEntity.notFound().build();
             }
 
-            // Giải mã file
+            // Giải mã file gốc
             byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
+
+            // Thêm watermark
+            byte[] watermarkedPdf = fileUtil.addWatermark(decryptedContent, cccd);
 
             return ResponseEntity.ok()
                     .header("Content-Disposition", "attachment; filename=\"" + sanitizedFileName + "\"")
-                    .body(decryptedContent);
+                    .body(watermarkedPdf);
         } catch (Exception e) {
+            log.error("Error download file", e);
             return ResponseEntity.badRequest().build();
         }
     }
+
 }

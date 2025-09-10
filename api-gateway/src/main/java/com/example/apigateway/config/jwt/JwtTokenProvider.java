@@ -42,6 +42,15 @@ public class JwtTokenProvider {
         return claims.get("userId", Long.class);
     }
 
+    public String getCccdFromToken(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+        return claims.get("cccd", String.class);
+    }
+
     // Method để lấy JWT ID
     public String getJwtIdFromToken(String token) {
         Claims claims = Jwts.parser()

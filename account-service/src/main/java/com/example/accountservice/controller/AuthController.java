@@ -2,8 +2,6 @@ package com.example.accountservice.controller;
 
 import java.util.Map;
 import java.util.Optional;
-import java.util.List;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -16,10 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.accountservice.dto.LoginDTO;
 import com.example.accountservice.model.Account;
-import com.example.accountservice.model.AccountPosition;
 import com.example.accountservice.service.AccountService;
 import com.example.accountservice.service.RedisTokenService;
-import com.example.accountservice.service.AccountPositionService;
 import com.example.accountservice.util.JwtUtil;
 
 import jakarta.servlet.http.Cookie;
@@ -48,9 +44,6 @@ public class AuthController {
     private JwtUtil jwtUtil;
 
     @Autowired
-    private AccountPositionService accountPositionService;
-
-    @Autowired
     private HttpServletRequest request;
 
     @PostMapping("/login")
@@ -66,11 +59,10 @@ public class AuthController {
             }
 
             Account account = accountOpt.get();
-            List<Long> positions = getPositionsByAccount(account.getId());
-            String token = jwtUtil.generateToken(account.getId());
+            String token = jwtUtil.generateToken(account);
             String jwtId = jwtUtil.getJwtIdFromToken(token);
 
-            redisTokenService.saveTokenInfo(jwtId, account.getId(), account.getRole(), positions);
+            redisTokenService.saveTokenInfo(jwtId, account);
 
             // Set JWT cookie
             Cookie jwtCookie = new Cookie("jwt", token);
@@ -124,15 +116,4 @@ public class AuthController {
         }
     }
 
-    private List<Long> getPositionsByAccount(Long accountId) {
-        try {
-            List<AccountPosition> accountPositions = accountPositionService.getPositionsByAccount(accountId);
-            return accountPositions.stream()
-                    .map(ap -> ap.getPosition().getId())
-                    .collect(Collectors.toList());
-        } catch (Exception e) {
-            log.warn("Cannot get positions for account {}: {}", accountId, e.getMessage());
-            return List.of();
-        }
-    }
 }

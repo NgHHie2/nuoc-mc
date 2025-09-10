@@ -1,6 +1,11 @@
 package com.example.learnservice.util;
 
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.GradientPaint;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -10,6 +15,9 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Set;
 
 import javax.crypto.Cipher;
@@ -18,8 +26,16 @@ import javax.crypto.spec.SecretKeySpec;
 import javax.imageio.ImageIO;
 
 import org.apache.commons.io.FilenameUtils;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.util.Matrix;
 import org.apache.tika.Tika;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.XMPDM;
@@ -233,7 +249,7 @@ public class FileUtil {
                 PDDocument document = PDDocument.load(inputStream)) {
 
             PDFRenderer pdfRenderer = new PDFRenderer(document);
-            BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(0, 150); // Render trang đầu tiên với DPI 300
+            BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(0, 150); // Render trang đầu tiên
 
             // Resize về kích thước chuẩn
             BufferedImage resizedImage = resizeImage(bufferedImage, 300, 200);
@@ -263,9 +279,8 @@ public class FileUtil {
             createSimpleVideoIcon(previewPath);
         } finally {
             // Cleanup temp file
-            if (tempVideoFile.exists()) {
+            if (tempVideoFile.exists())
                 tempVideoFile.delete();
-            }
         }
     }
 
@@ -299,20 +314,20 @@ public class FileUtil {
         var graphics = image.createGraphics();
 
         // Gradient background
-        java.awt.GradientPaint gradient = new java.awt.GradientPaint(
-                0, 0, java.awt.Color.decode("#1976D2"),
-                300, 200, java.awt.Color.decode("#42A5F5"));
+        GradientPaint gradient = new GradientPaint(
+                0, 0, Color.decode("#1976D2"),
+                300, 200, Color.decode("#42A5F5"));
         graphics.setPaint(gradient);
         graphics.fillRect(0, 0, 300, 200);
 
         // Play button
-        graphics.setColor(java.awt.Color.WHITE);
+        graphics.setColor(Color.WHITE);
         int[] xPoints = { 110, 110, 190 };
         int[] yPoints = { 60, 140, 100 };
         graphics.fillPolygon(xPoints, yPoints, 3);
 
         // Circle around play button
-        graphics.setStroke(new java.awt.BasicStroke(3));
+        graphics.setStroke(new BasicStroke(3));
         graphics.drawOval(85, 55, 130, 90);
 
         graphics.dispose();
@@ -354,18 +369,18 @@ public class FileUtil {
             var graphics = image.createGraphics();
 
             if (format == DocumentFormat.PDF) {
-                graphics.setColor(java.awt.Color.decode("#FFEBEE"));
+                graphics.setColor(Color.decode("#FFEBEE"));
                 graphics.fillRect(0, 0, 300, 200);
-                graphics.setColor(java.awt.Color.decode("#D32F2F"));
+                graphics.setColor(Color.decode("#D32F2F"));
                 graphics.drawRect(0, 0, 299, 199);
-                graphics.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 24));
+                graphics.setFont(new Font("Arial", Font.BOLD, 24));
                 graphics.drawString("PDF", 125, 105);
             } else {
-                graphics.setColor(java.awt.Color.decode("#E3F2FD"));
+                graphics.setColor(Color.decode("#E3F2FD"));
                 graphics.fillRect(0, 0, 300, 200);
-                graphics.setColor(java.awt.Color.decode("#1976D2"));
+                graphics.setColor(Color.decode("#1976D2"));
                 graphics.drawRect(0, 0, 299, 199);
-                graphics.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 24));
+                graphics.setFont(new Font("Arial", Font.BOLD, 24));
                 graphics.drawString("VIDEO", 110, 105);
             }
 
@@ -398,6 +413,59 @@ public class FileUtil {
             if (finalDecrypted != null) {
                 baos.write(finalDecrypted);
             }
+            return baos.toByteArray();
+        }
+    }
+
+    /**
+     * Thêm watermark động (theo CCCD) vào PDF
+     */
+    public byte[] addWatermark(byte[] pdfBytes, String cccd) throws IOException {
+        try (PDDocument document = PDDocument.load(new ByteArrayInputStream(pdfBytes));
+                ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+
+            for (PDPage page : document.getPages()) {
+                PDRectangle mediaBox = page.getMediaBox();
+                float pageWidth = mediaBox.getWidth();
+                float pageHeight = mediaBox.getHeight();
+
+                try (PDPageContentStream cs = new PDPageContentStream(document, page,
+                        PDPageContentStream.AppendMode.APPEND, true, true)) {
+
+                    // Trạng thái trong suốt
+                    PDExtendedGraphicsState gs = new PDExtendedGraphicsState();
+                    gs.setNonStrokingAlphaConstant(0.4f);
+                    COSName gsName = COSName.getPDFName("TransparentGS");
+                    page.getResources().put(gsName, gs);
+                    cs.setGraphicsStateParameters(gs);
+
+                    // Lấy timestamp theo giờ Việt Nam
+                    ZonedDateTime nowVN = ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+                    String formattedTime = nowVN.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+
+                    // Tạo watermark
+                    String watermark = "CCCD: " + cccd + " - " + formattedTime;
+                    PDFont font = PDType1Font.HELVETICA_OBLIQUE;
+                    float fontSize = 18f;
+
+                    // Lặp watermark theo dạng caro, nhưng căn giữa chữ tại điểm grid
+                    for (float gridX = 0; gridX < pageWidth; gridX += 300) {
+                        for (float gridY = 0; gridY < pageHeight; gridY += 200) {
+                            float x = gridX + 20;
+                            float y = gridY + 20;
+
+                            cs.beginText();
+                            cs.setFont(font, fontSize);
+                            cs.setNonStrokingColor(new Color(180, 180, 180));
+                            cs.setTextMatrix(Matrix.getRotateInstance(Math.toRadians(45), x, y));
+                            cs.showText(watermark);
+                            cs.endText();
+                        }
+                    }
+                }
+            }
+
+            document.save(baos);
             return baos.toByteArray();
         }
     }

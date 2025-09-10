@@ -50,7 +50,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         // THÊM: Chặn request nếu header chứa các trường không hợp lệ
         HttpHeaders headers = exchange.getRequest().getHeaders();
         if (headers.containsKey("X-User-Id") || headers.containsKey("X-User-Role")
-                || headers.containsKey("X-Positions")) {
+                || headers.containsKey("X-Positions") || headers.containsKey("X-CCCD")) {
             return handleUnauthorized(exchange);
         }
 
@@ -67,6 +67,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         // Truy vấn redis lấy thông tin jwt và account theo accountId trong jwt
         Long accountId = jwtTokenProvider.getUserIdFromToken(token);
+        String cccd = jwtTokenProvider.getCccdFromToken(token);
         Optional<RedisTokenInfo> redisTokenInfo = redisTokenService.getTokenInfo(accountId);
 
         if (redisTokenInfo.isEmpty()
@@ -84,6 +85,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 .header("X-User-Id", tokenInfo.getAccountId().toString())
                 .header("X-User-Role", tokenInfo.getRole())
                 .header("X-Positions", positionsHeader)
+                .header("X-CCCD", cccd)
                 .build();
 
         return chain.filter(exchange.mutate().request(modifiedRequest).build());

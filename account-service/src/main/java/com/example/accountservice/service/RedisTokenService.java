@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.example.accountservice.enums.Role;
+import com.example.accountservice.model.Account;
+import com.example.accountservice.model.AccountPosition;
 import com.example.accountservice.model.RedisTokenInfo;
 import com.example.accountservice.repository.RedisTokenRepository;
 
@@ -11,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -19,10 +22,16 @@ public class RedisTokenService {
     @Autowired
     private RedisTokenRepository redisTokenRepository;
 
+    @Autowired
+    private AccountPositionService accountPositionService;
+
     /**
      * Lưu thông tin token vào Redis
      */
-    public void saveTokenInfo(String jti, Long accountId, Role role, List<Long> positions) {
+    public void saveTokenInfo(String jti, Account account) {
+        Long accountId = account.getId();
+        Role role = account.getRole();
+        List<Long> positions = getPositionsByAccount(account.getId());
         try {
             redisTokenRepository.deleteById(accountId);
             RedisTokenInfo tokenInfo = new RedisTokenInfo(jti, accountId, role, positions);
@@ -31,6 +40,18 @@ public class RedisTokenService {
                     jti, accountId, role, positions);
         } catch (Exception e) {
             log.error("Failed to save token info to Redis - JTI: {}, Error: {}", jti, e.getMessage());
+        }
+    }
+
+    private List<Long> getPositionsByAccount(Long accountId) {
+        try {
+            List<AccountPosition> accountPositions = accountPositionService.getPositionsByAccount(accountId);
+            return accountPositions.stream()
+                    .map(ap -> ap.getPosition().getId())
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Cannot get positions for account {}: {}", accountId, e.getMessage());
+            return List.of();
         }
     }
 
