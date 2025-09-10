@@ -1,28 +1,34 @@
 package com.example.learnservice.util;
 
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Set;
-import java.util.UUID;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherOutputStream;
 import javax.crypto.spec.SecretKeySpec;
+import javax.imageio.ImageIO;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.tika.Tika;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.XMPDM;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.BodyContentHandler;
+import net.bramp.ffmpeg.FFmpeg;
+import net.bramp.ffmpeg.FFmpegExecutor;
+import net.bramp.ffmpeg.builder.FFmpegBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,6 +47,9 @@ public class FileUtil {
 
     @Value("${file.encryption.key}")
     private String encryptionKey;
+
+    @Value("${ffmpeg.path:ffmpeg}")
+    private String ffmpegPath;
 
     private final Tika tika = new Tika();
 
@@ -163,17 +172,17 @@ public class FileUtil {
         }
     }
 
-    public String encryptFile(MultipartFile file, String originalFileName) throws Exception {
-        // Tạo thư mục nếu chưa tồn tại
-        File directory = new File(uploadDir);
-        if (!directory.exists()) {
-            directory.mkdirs();
+    public String encryptFile(MultipartFile file, String documentCode) throws Exception {
+        // Tạo thư mục doc nếu chưa tồn tại
+        File docDirectory = new File(uploadDir, "doc");
+        if (!docDirectory.exists()) {
+            docDirectory.mkdirs();
         }
 
         InputStream inputStream = file.getInputStream();
-        String extension = FilenameUtils.getExtension(originalFileName);
-        String fileName = UUID.randomUUID().toString() + "." + extension;
-        Path filePath = Paths.get(uploadDir, fileName);
+        String extension = FilenameUtils.getExtension(file.getOriginalFilename());
+        String fileName = documentCode + "." + extension;
+        Path filePath = Paths.get(uploadDir, "doc", fileName);
         File outputFile = filePath.toFile();
 
         Cipher cipher = Cipher.getInstance("AES");
@@ -191,6 +200,182 @@ public class FileUtil {
         }
 
         return filePath.toString();
+    }
+
+    public String generatePreview(MultipartFile file, String documentCode, DocumentFormat format) throws Exception {
+        // Tạo thư mục preview nếu chưa tồn tại
+        File previewDirectory = new File(uploadDir, "preview");
+        if (!previewDirectory.exists()) {
+            previewDirectory.mkdirs();
+        }
+
+        String previewFileName = documentCode + ".jpg";
+        Path previewPath = Paths.get(uploadDir, "preview", previewFileName);
+
+        try {
+            if (format == DocumentFormat.PDF) {
+                generatePdfPreview(file, previewPath);
+            } else if (format == DocumentFormat.VIDEO) {
+                generateVideoPreview(file, previewPath);
+            }
+
+            log.info("Preview generated successfully: {}", previewPath);
+            return previewPath.toString();
+        } catch (Exception e) {
+            log.error("Failed to generate preview for {}: {}", documentCode, e.getMessage());
+            // Tạo preview mặc định nếu không tạo được
+            return createDefaultPreview(previewPath, format);
+        }
+    }
+
+    private void generatePdfPreview(MultipartFile file, Path previewPath) throws Exception {
+        try (InputStream inputStream = file.getInputStream();
+                PDDocument document = PDDocument.load(inputStream)) {
+
+            PDFRenderer pdfRenderer = new PDFRenderer(document);
+            BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(0, 150); // Render trang đầu tiên với DPI 300
+
+            // Resize về kích thước chuẩn
+            BufferedImage resizedImage = resizeImage(bufferedImage, 300, 200);
+            ImageIO.write(resizedImage, "jpg", previewPath.toFile());
+        }
+    }
+
+    private void generateVideoPreview(MultipartFile file, Path previewPath) throws Exception {
+        // Tạo temp file cho video input
+        File tempVideoFile = File.createTempFile("temp_video", ".tmp");
+
+        try {
+            // Copy MultipartFile to temp file
+            try (InputStream inputStream = file.getInputStream();
+                    FileOutputStream fos = new FileOutputStream(tempVideoFile)) {
+                inputStream.transferTo(fos);
+            }
+
+            // Tạo thumbnail bằng FFmpeg
+            createVideoThumbnailWithFFmpeg(tempVideoFile.getAbsolutePath(), previewPath.toString());
+
+            log.info("Successfully created video thumbnail with FFmpeg");
+
+        } catch (Exception e) {
+            log.warn("Failed to create video thumbnail with FFmpeg: {}", e.getMessage());
+            // Fallback to simple icon
+            createSimpleVideoIcon(previewPath);
+        } finally {
+            // Cleanup temp file
+            if (tempVideoFile.exists()) {
+                tempVideoFile.delete();
+            }
+        }
+    }
+
+    private void createVideoThumbnailWithFFmpeg(String videoPath, String outputPath) throws Exception {
+        try {
+            // Initialize FFmpeg với path Windows
+            FFmpeg ffmpeg = new FFmpeg(ffmpegPath);
+
+            // Build FFmpeg command
+            FFmpegBuilder builder = new FFmpegBuilder()
+                    .setInput(videoPath)
+                    .overrideOutputFiles(true)
+                    .addOutput(outputPath)
+                    .setVideoFilter("scale=300:200:force_original_aspect_ratio=decrease,pad=300:200:-1:-1:color=black")
+                    .setFrames(1) // Extract only 1 frame
+                    .setStartOffset(1, java.util.concurrent.TimeUnit.SECONDS) // Start at 1 second (safer than 5s)
+                    .done();
+
+            // Execute FFmpeg command
+            FFmpegExecutor executor = new FFmpegExecutor(ffmpeg);
+            executor.createJob(builder).run();
+
+        } catch (Exception e) {
+            log.error("FFmpeg execution failed: {}", e.getMessage());
+            throw e;
+        }
+    }
+
+    private void createSimpleVideoIcon(Path previewPath) throws Exception {
+        BufferedImage image = new BufferedImage(300, 200, BufferedImage.TYPE_INT_RGB);
+        var graphics = image.createGraphics();
+
+        // Gradient background
+        java.awt.GradientPaint gradient = new java.awt.GradientPaint(
+                0, 0, java.awt.Color.decode("#1976D2"),
+                300, 200, java.awt.Color.decode("#42A5F5"));
+        graphics.setPaint(gradient);
+        graphics.fillRect(0, 0, 300, 200);
+
+        // Play button
+        graphics.setColor(java.awt.Color.WHITE);
+        int[] xPoints = { 110, 110, 190 };
+        int[] yPoints = { 60, 140, 100 };
+        graphics.fillPolygon(xPoints, yPoints, 3);
+
+        // Circle around play button
+        graphics.setStroke(new java.awt.BasicStroke(3));
+        graphics.drawOval(85, 55, 130, 90);
+
+        graphics.dispose();
+        ImageIO.write(image, "jpg", previewPath.toFile());
+    }
+
+    private BufferedImage resizeImage(BufferedImage originalImage, int targetWidth, int targetHeight) {
+        // Tính toán tỷ lệ để giữ nguyên aspect ratio
+        int originalWidth = originalImage.getWidth();
+        int originalHeight = originalImage.getHeight();
+
+        double widthRatio = (double) targetWidth / originalWidth;
+        double heightRatio = (double) targetHeight / originalHeight;
+        double ratio = Math.min(widthRatio, heightRatio);
+
+        int newWidth = (int) (originalWidth * ratio);
+        int newHeight = (int) (originalHeight * ratio);
+
+        BufferedImage resizedImage = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+        var graphics = resizedImage.createGraphics();
+
+        // Nền đen
+        graphics.setColor(java.awt.Color.BLACK);
+        graphics.fillRect(0, 0, targetWidth, targetHeight);
+
+        // Vẽ ảnh ở giữa
+        int x = (targetWidth - newWidth) / 2;
+        int y = (targetHeight - newHeight) / 2;
+        graphics.drawImage(originalImage.getScaledInstance(newWidth, newHeight, java.awt.Image.SCALE_SMOOTH),
+                x, y, null);
+
+        graphics.dispose();
+        return resizedImage;
+    }
+
+    private String createDefaultPreview(Path previewPath, DocumentFormat format) {
+        try {
+            BufferedImage image = new BufferedImage(300, 200, BufferedImage.TYPE_INT_RGB);
+            var graphics = image.createGraphics();
+
+            if (format == DocumentFormat.PDF) {
+                graphics.setColor(java.awt.Color.decode("#FFEBEE"));
+                graphics.fillRect(0, 0, 300, 200);
+                graphics.setColor(java.awt.Color.decode("#D32F2F"));
+                graphics.drawRect(0, 0, 299, 199);
+                graphics.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 24));
+                graphics.drawString("PDF", 125, 105);
+            } else {
+                graphics.setColor(java.awt.Color.decode("#E3F2FD"));
+                graphics.fillRect(0, 0, 300, 200);
+                graphics.setColor(java.awt.Color.decode("#1976D2"));
+                graphics.drawRect(0, 0, 299, 199);
+                graphics.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 24));
+                graphics.drawString("VIDEO", 110, 105);
+            }
+
+            graphics.dispose();
+            ImageIO.write(image, "jpg", previewPath.toFile());
+            return previewPath.toString();
+        } catch (Exception e) {
+            log.error("Failed to create default preview: {}", e.getMessage());
+            return null;
+        }
     }
 
     public byte[] decryptFile(File inputFile) throws Exception {
@@ -217,12 +402,19 @@ public class FileUtil {
         }
     }
 
-    public String uploadNotEncryptFile(MultipartFile file, String originalFileName) throws Exception {
+    public String uploadNotEncryptFile(MultipartFile file, String documentCode) throws Exception {
+        // Tạo thư mục doc nếu chưa tồn tại
+        File docDirectory = new File(uploadDir, "doc");
+        if (!docDirectory.exists()) {
+            docDirectory.mkdirs();
+        }
+
         InputStream inputStream = file.getInputStream();
-        String extension = FilenameUtils.getExtension(originalFileName);
-        String fileName = UUID.randomUUID().toString() + "." + extension;
-        Path filePath = Paths.get(uploadDir, fileName);
+        String extension = FilenameUtils.getExtension(file.getOriginalFilename());
+        String fileName = documentCode + "." + extension;
+        Path filePath = Paths.get(uploadDir, "doc", fileName);
         File outputFile = filePath.toFile();
+
         try (FileOutputStream fos = new FileOutputStream(outputFile)) {
             byte[] buffer = new byte[8192]; // 8KB buffer
             int bytesRead;
@@ -231,5 +423,13 @@ public class FileUtil {
             }
         }
         return filePath.toString();
+    }
+
+    public byte[] getPreviewImage(String previewPath) throws IOException {
+        Path path = Paths.get(previewPath);
+        if (Files.exists(path)) {
+            return Files.readAllBytes(path);
+        }
+        throw new IOException("Preview image not found: " + previewPath);
     }
 }

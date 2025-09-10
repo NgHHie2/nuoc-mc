@@ -33,15 +33,20 @@ public class DocumentService {
         document.setCreatedBy(userId);
         document.setUpdatedBy(userId);
 
+        // Generate unique code for document
+        String documentCode = UUID.randomUUID().toString();
+        document.setCode(documentCode);
+
         // Phân tích nội dung file để set pages/minutes
         fileUtil.analyzeFileContent(file, document);
 
-        // Mã hóa và lưu file
-        String filePath = fileUtil.encryptFile(file, document.getName());
+        // Mã hóa và lưu file với tên là documentCode
+        String filePath = fileUtil.encryptFile(file, documentCode);
         document.setFilePath(filePath);
 
-        // Generate unique code for document
-        document.setCode(UUID.randomUUID().toString());
+        // Tạo preview image
+        String previewPath = fileUtil.generatePreview(file, documentCode, document.getFormat());
+        document.setPreviewPath(previewPath);
 
         return documentRepository.save(document);
     }

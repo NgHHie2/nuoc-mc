@@ -34,6 +34,7 @@ public class Document {
     private Integer pages; // Số trang (cho PDF)
     private Integer minutes; // Số phút (cho video)
     private String filePath; // Đường dẫn vị trí lưu file
+    private String previewPath; // Đường dẫn vị trí lưu ảnh preview
 
     @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Catalog> catalogs;
