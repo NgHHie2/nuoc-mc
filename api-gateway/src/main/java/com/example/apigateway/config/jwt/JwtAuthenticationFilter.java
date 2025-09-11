@@ -101,6 +101,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         // 2. Check Cookie
         MultiValueMap<String, HttpCookie> cookies = request.getCookies();
         if (cookies.containsKey(JWT_COOKIE_NAME)) {
+            log.info("token: " + cookies.getFirst(JWT_COOKIE_NAME));
             HttpCookie jwtCookie = cookies.getFirst(JWT_COOKIE_NAME);
             if (jwtCookie != null && StringUtils.hasText(jwtCookie.getValue())) {
                 return jwtCookie.getValue();

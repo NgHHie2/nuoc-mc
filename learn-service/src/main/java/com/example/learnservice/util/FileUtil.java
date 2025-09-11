@@ -42,9 +42,6 @@ import org.apache.tika.metadata.XMPDM;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.BodyContentHandler;
-import net.bramp.ffmpeg.FFmpeg;
-import net.bramp.ffmpeg.FFmpegExecutor;
-import net.bramp.ffmpeg.builder.FFmpegBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -53,6 +50,9 @@ import com.example.learnservice.enums.DocumentFormat;
 import com.example.learnservice.model.Document;
 
 import lombok.extern.slf4j.Slf4j;
+import net.bramp.ffmpeg.FFmpeg;
+import net.bramp.ffmpeg.FFmpegExecutor;
+import net.bramp.ffmpeg.builder.FFmpegBuilder;
 
 @Slf4j
 @Component
@@ -60,6 +60,9 @@ public class FileUtil {
 
     @Value("${file.upload.dir:./uploads}")
     private String uploadDir;
+
+    @Value("${temp.dir:D:/temp}")
+    private String tempRepo;
 
     @Value("${file.encryption.key}")
     private String encryptionKey;
@@ -468,6 +471,96 @@ public class FileUtil {
             document.save(baos);
             return baos.toByteArray();
         }
+    }
+
+    /**
+     * Thêm watermark động cho video với vị trí thay đổi theo thời gian
+     */
+    public byte[] addVideoWatermark(byte[] videoBytes, String cccd) throws Exception {
+        // Tạo temp dir cố định
+        File tempDir = new File(tempRepo);
+        if (!tempDir.exists())
+            tempDir.mkdirs();
+
+        File tempInputFile = File.createTempFile("input", ".mp4", tempDir);
+        File tempOutputFile = File.createTempFile("output", ".mp4", tempDir);
+
+        try {
+            // Write input video to temp file
+            Files.write(tempInputFile.toPath(), videoBytes);
+
+            // Lấy timestamp theo giờ Việt Nam
+            ZonedDateTime nowVN = ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+            String formattedTime = nowVN.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            String watermarkText = "CCCD: " + cccd + " - " + formattedTime;
+
+            // Create watermark với vị trí động
+            String watermarkFilter = createDynamicWatermarkFilter(watermarkText);
+
+            // Initialize FFmpeg
+            FFmpeg ffmpeg = new FFmpeg(ffmpegPath);
+
+            // Build FFmpeg command với watermark động
+            FFmpegBuilder builder = new FFmpegBuilder()
+                    .setInput(tempInputFile.getAbsolutePath())
+                    .overrideOutputFiles(true)
+                    .addOutput(tempOutputFile.getAbsolutePath())
+                    .setVideoFilter(watermarkFilter)
+                    .setVideoCodec("libx264")
+                    .setAudioCodec("copy") // Copy audio without re-encoding
+                    .setFormat("mp4")
+                    .done();
+
+            // Execute FFmpeg command
+            FFmpegExecutor executor = new FFmpegExecutor(ffmpeg);
+            executor.createJob(builder).run();
+
+            // Read watermarked video
+            return Files.readAllBytes(tempOutputFile.toPath());
+
+        } finally {
+            // Cleanup temp files
+            if (tempInputFile.exists())
+                tempInputFile.delete();
+            if (tempOutputFile.exists())
+                tempOutputFile.delete();
+        }
+    }
+
+    /**
+     * Tạo filter động cho watermark video - vị trí thay đổi đơn giản
+     */
+    private String createDynamicWatermarkFilter(String text) {
+        // Escape text
+        String escapedText = text.replace(":", "\\:")
+                .replace("'", "\\'");
+
+        // Watermark nhảy giữa 4 góc màn hình mỗi 3 giây
+        return String.format(
+                "drawtext=text='%s':" +
+                        "fontsize=20:" +
+                        "fontcolor=white@0.8:" +
+                        "box=1:" +
+                        "boxcolor=black@0.5:" +
+                        "boxborderw=3:" +
+                        "x='if(lt(mod(t,12),3), 20, if(lt(mod(t,12),6), main_w-text_w-20, if(lt(mod(t,12),9), 20, main_w-text_w-20)))':"
+                        +
+                        "y='if(lt(mod(t,12),3), 20, if(lt(mod(t,12),6), 20, if(lt(mod(t,12),9), main_h-text_h-20, main_h-text_h-20)))'",
+                escapedText);
+    }
+
+    /**
+     * Tạo watermark tĩnh đơn giản hơn (fallback)
+     */
+    private String createStaticWatermarkFilter(String text) {
+        return "drawtext=" +
+                "text='" + text.replace("'", "\\'") + "':" +
+                "fontsize=20:" +
+                "fontcolor=white@0.6:" +
+                "bordercolor=black@0.8:" +
+                "borderw=2:" +
+                "x=10:" +
+                "y=10";
     }
 
     public String uploadNotEncryptFile(MultipartFile file, String documentCode) throws Exception {
