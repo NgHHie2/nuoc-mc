@@ -1,37 +1,42 @@
 package com.example.learnservice.controller;
 
+import com.example.learnservice.dto.DocumentUploadRequest;
 import com.example.learnservice.enums.DocumentFormat;
 import com.example.learnservice.model.Document;
 import com.example.learnservice.repository.DocumentRepository;
 import com.example.learnservice.service.DocumentService;
 import com.example.learnservice.util.FileUtil;
 
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpRange;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RestController
@@ -51,14 +56,16 @@ public class DocumentController {
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
     public ResponseEntity<?> uploadFile(
-            @Parameter(description = "File to upload", content = @Content(mediaType = "multipart/form-data")) @RequestParam("file") MultipartFile file,
+            @Valid @ModelAttribute DocumentUploadRequest uploadRequest,
             HttpServletRequest request) {
         try {
             // Lấy User ID từ header
             String userIdHeader = request.getHeader("X-User-Id");
             Long userId = Long.valueOf(userIdHeader);
+            // System.out.println(document);
 
-            Document savedDocument = documentService.processAndSaveDocument(file, userId);
+            Document savedDocument = documentService.processAndSaveDocument(uploadRequest.getFile(), userId,
+                    uploadRequest);
 
             // Trả về thông tin file
             Map<String, Object> response = new HashMap<>();
@@ -77,196 +84,104 @@ public class DocumentController {
         }
     }
 
-    @GetMapping("/download/{fileName}")
-    public ResponseEntity<byte[]> downloadFile(
-            @PathVariable String fileName,
-            HttpServletRequest request) {
-        try {
-            log.info("X-CCCD: " + request.getHeader("X-CCCD"));
-            String cccd = request.getHeader("X-CCCD");
+    @GetMapping("/download/{fileCode}")
+    public ResponseEntity<Resource> downloadFile(
+            @PathVariable String fileCode,
+            HttpServletRequest request) throws Exception {
 
-            // Sanitize filename
-            String sanitizedFileName = FilenameUtils.getName(fileName);
-            Path filePath = Paths.get(uploadDir, "doc", sanitizedFileName);
+        log.info("X-CCCD: " + request.getHeader("X-CCCD"));
+        String cccd = request.getHeader("X-CCCD");
 
-            if (!Files.exists(filePath)) {
-                return ResponseEntity.notFound().build();
-            }
+        System.out.println(request.getHeader("X-Positions"));
+        List<Long> positions = Arrays.stream(request.getHeader("X-Positions").split(","))
+                .filter(s -> !s.isBlank())
+                .map(Long::parseLong)
+                .toList();
 
-            // Lấy thông tin document từ DB để biết format
-            String documentCode = FilenameUtils.getBaseName(sanitizedFileName);
-            Optional<Document> documentOpt = documentRepository.findByCode(documentCode);
-
-            if (documentOpt.isEmpty()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            Document document = documentOpt.get();
-
-            // Giải mã file gốc
-            byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
-
-            // Thêm watermark dựa theo format
-            byte[] watermarkedContent;
-            String contentType;
-
-            if (document.getFormat() == DocumentFormat.PDF) {
-                watermarkedContent = fileUtil.addWatermark(decryptedContent, cccd);
-                contentType = "application/pdf";
-            } else if (document.getFormat() == DocumentFormat.VIDEO) {
-                watermarkedContent = fileUtil.addVideoWatermark(decryptedContent, cccd);
-                contentType = "video/mp4";
-            } else {
-                return ResponseEntity.badRequest().build();
-            }
-
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_TYPE, contentType)
-                    .header("Content-Disposition", "attachment; filename=\"" + sanitizedFileName + "\"")
-                    .body(watermarkedContent);
-
-        } catch (Exception e) {
-            log.error("Error download file", e);
-            return ResponseEntity.badRequest().build();
+        Document document = documentService.getDocumentByCode(fileCode);
+        if (!documentService.checkDocumentAccess(document, positions)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Permission denied");
         }
+        Path filePath = documentService.getDocumentPath(document);
+
+        // Thêm watermark dựa theo format
+        byte[] watermarkedContent = documentService.getFileContent(filePath, document, cccd);
+
+        String encodedFileName = URLEncoder.encode(document.getName(), StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+        String contentDisposition = "attachment; filename*=UTF-8''" + encodedFileName;
+
+        // Tạo InputStreamResource
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(watermarkedContent);
+        InputStreamResource resource = new InputStreamResource(inputStream);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, Files.probeContentType(filePath))
+                .header("Content-Disposition", contentDisposition)
+                .body(resource);
+
     }
 
     /**
      * Stream video với hỗ trợ HTTP Range requests
+     * 
      */
     @GetMapping("/stream/{fileName}")
-    public void streamVideo(
+    public ResponseEntity<ResourceRegion> streamVideo(
             @PathVariable String fileName,
-            HttpServletRequest request,
-            HttpServletResponse response) throws IOException {
+            @RequestHeader HttpHeaders headers,
+            HttpServletRequest request) throws Exception {
 
-        try {
-            String cccd = request.getHeader("X-CCCD");
-            if (cccd == null || cccd.isEmpty()) {
-                response.setStatus(HttpStatus.BAD_REQUEST.value());
-                return;
-            }
-
-            // Sanitize filename
-            String sanitizedFileName = FilenameUtils.getName(fileName);
-            Path filePath = Paths.get(uploadDir, "doc", sanitizedFileName);
-
-            if (!Files.exists(filePath)) {
-                response.setStatus(HttpStatus.NOT_FOUND.value());
-                return;
-            }
-
-            // Lấy thông tin document từ DB
-            String documentCode = FilenameUtils.getBaseName(sanitizedFileName);
-            Optional<Document> documentOpt = documentRepository.findByCode(documentCode);
-
-            if (documentOpt.isEmpty() || documentOpt.get().getFormat() != DocumentFormat.VIDEO) {
-                response.setStatus(HttpStatus.NOT_FOUND.value());
-                return;
-            }
-
-            // Giải mã và thêm watermark cho video
-            String cacheKey = documentCode + "_" + cccd;
-            File cachedFile = new File("D:/temp/cache_" + cacheKey + ".mp4");
-
-            byte[] watermarkedContent;
-            if (cachedFile.exists()) {
-                // Dùng cache
-                watermarkedContent = Files.readAllBytes(cachedFile.toPath());
-                log.info("Using cached watermarked video");
-            } else {
-                // Tạo mới và cache
-                byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
-                watermarkedContent = fileUtil.addVideoWatermark(decryptedContent, cccd);
-                Files.write(cachedFile.toPath(), watermarkedContent);
-                log.info("Created and cached watermarked video");
-            }
-
-            // Handle Range requests
-            String rangeHeader = request.getHeader("Range");
-            log.info("Range: " + rangeHeader);
-            if (rangeHeader == null) {
-                // No range, send entire file
-                response.setStatus(HttpStatus.OK.value());
-                response.setContentType("video/mp4");
-                response.setContentLength(watermarkedContent.length);
-                response.setHeader("Accept-Ranges", "bytes");
-
-                try (OutputStream out = response.getOutputStream()) {
-                    out.write(watermarkedContent);
-                }
-            } else {
-                // Handle range request
-                handleRangeRequest(watermarkedContent, rangeHeader, response);
-            }
-
-        } catch (Exception e) {
-            log.error("Error streaming video", e);
-            response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
-        }
-    }
-
-    /**
-     * Xử lý HTTP Range requests cho video streaming
-     */
-    private void handleRangeRequest(byte[] content, String rangeHeader, HttpServletResponse response)
-            throws IOException {
-        long fileLength = content.length;
-
-        // Parse Range header: bytes=start-end
-        Pattern rangePattern = Pattern.compile("bytes=([0-9]*)-([0-9]*)");
-        Matcher matcher = rangePattern.matcher(rangeHeader);
-
-        if (!matcher.matches()) {
-            response.setStatus(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE.value());
-            return;
+        String cccd = request.getHeader("X-CCCD");
+        if (cccd == null || cccd.isEmpty()) {
+            return ResponseEntity.badRequest().build();
         }
 
-        String startStr = matcher.group(1);
-        String endStr = matcher.group(2);
+        String sanitizedFileName = FilenameUtils.getName(fileName);
+        Path filePath = Paths.get(uploadDir, "doc", sanitizedFileName);
 
-        long start = 0;
-        long end = fileLength - 1;
-
-        if (!startStr.isEmpty()) {
-            start = Long.parseLong(startStr);
+        if (!Files.exists(filePath)) {
+            return ResponseEntity.notFound().build();
         }
 
-        if (!endStr.isEmpty()) {
-            end = Long.parseLong(endStr);
+        String documentCode = FilenameUtils.getBaseName(sanitizedFileName);
+        Optional<Document> documentOpt = documentRepository.findByCode(documentCode);
+        if (documentOpt.isEmpty() || documentOpt.get().getFormat() != DocumentFormat.VIDEO) {
+            return ResponseEntity.notFound().build();
         }
 
-        // Validate range
-        if (start >= fileLength || end >= fileLength || start > end) {
-            response.setStatus(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE.value());
-            response.setHeader("Content-Range", "bytes */" + fileLength);
-            return;
+        // Tạo cached watermarked file nếu chưa có
+        String cacheKey = documentCode + "_" + cccd;
+        File cachedFile = new File("D:/temp/cache_" + cacheKey + ".mp4");
+        if (!cachedFile.exists()) {
+            byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
+            byte[] watermarkedContent = fileUtil.addVideoWatermark(decryptedContent, cccd);
+            Files.write(cachedFile.toPath(), watermarkedContent);
+            log.info("Created and cached watermarked video for {}", documentCode);
         }
 
-        long contentLength = end - start + 1;
+        FileSystemResource videoResource = new FileSystemResource(cachedFile);
+        long contentLength = videoResource.contentLength();
 
-        // Set response headers for partial content
-        response.setStatus(HttpStatus.PARTIAL_CONTENT.value());
-        response.setContentType("video/mp4");
-        response.setHeader("Accept-Ranges", "bytes");
-        response.setHeader("Content-Range", "bytes " + start + "-" + end + "/" + fileLength);
-        response.setContentLengthLong(contentLength);
-
-        // Write partial content
-        try (OutputStream out = response.getOutputStream()) {
-            ByteArrayInputStream bis = new ByteArrayInputStream(content);
-            bis.skip(start);
-
-            byte[] buffer = new byte[8192];
-            long bytesWritten = 0;
-            int bytesRead;
-
-            while (bytesWritten < contentLength && (bytesRead = bis.read(buffer)) != -1) {
-                int toWrite = (int) Math.min(bytesRead, contentLength - bytesWritten);
-                out.write(buffer, 0, toWrite);
-                bytesWritten += toWrite;
-            }
+        // Xử lý Range header (nếu có)
+        ResourceRegion region;
+        if (headers.getRange() != null && !headers.getRange().isEmpty()) {
+            HttpRange range = headers.getRange().get(0);
+            long start = range.getRangeStart(contentLength);
+            long end = range.getRangeEnd(contentLength);
+            long rangeLength = Math.min(1 * 1024 * 1024, end - start + 1); // chunk ~1MB
+            region = new ResourceRegion(videoResource, start, rangeLength);
+        } else {
+            long rangeLength = Math.min(1 * 1024 * 1024, contentLength);
+            region = new ResourceRegion(videoResource, 0, rangeLength);
         }
+
+        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT) // 206
+                .contentType(MediaTypeFactory.getMediaType(videoResource).orElse(MediaType.APPLICATION_OCTET_STREAM))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic())
+                .body(region);
     }
 
     /**
@@ -284,8 +199,8 @@ public class DocumentController {
             if (document.getPreviewPath() == null) {
                 return ResponseEntity.notFound().build();
             }
-
-            byte[] previewBytes = fileUtil.getPreviewImage(document.getPreviewPath());
+            Path previewPath = Paths.get(uploadDir, "preview", document.getCode() + ".jpg");
+            byte[] previewBytes = fileUtil.getPreviewImage(previewPath);
 
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_JPEG)

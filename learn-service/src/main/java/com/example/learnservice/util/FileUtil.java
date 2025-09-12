@@ -31,6 +31,8 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
+import org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
@@ -76,6 +78,7 @@ public class FileUtil {
     private final Set<String> allowedMimeTypes = Set.of(
             "application/pdf",
             "video/mp4",
+            "audio/mp3",
             "video/avi",
             "video/quicktime",
             "video/x-msvideo");
@@ -100,11 +103,28 @@ public class FileUtil {
             throw new IllegalArgumentException("Invalid filename");
         }
 
+        // Lấy extension từ tên file (nếu có)
+        String ext = FilenameUtils.getExtension(sanitizedName);
+        String expectedExtFromMime = switch (detectedMimeType) {
+            case "application/pdf" -> "pdf";
+            case "video/mp4" -> "mp4";
+            case "video/avi", "video/x-msvideo" -> "avi";
+            case "video/quicktime" -> "mov";
+            case "audio/mpeg" -> "mp3";
+            default -> "bin";
+        };
+        if (ext == null || ext.isBlank()) {
+            sanitizedName = sanitizedName + "." + expectedExtFromMime;
+        }
+        if (!ext.equalsIgnoreCase(expectedExtFromMime)) {
+            sanitizedName = FilenameUtils.removeExtension(sanitizedName) + "." + expectedExtFromMime;
+        }
+
         Document document = new Document();
         document.setName(sanitizedName);
         DocumentFormat format = switch (detectedMimeType) {
             case "application/pdf" -> DocumentFormat.PDF;
-            case "video/mp4", "video/avi", "video/quicktime", "video/x-msvideo" -> DocumentFormat.VIDEO;
+            case "video/mp4", "video/avi", "video/quicktime", "video/x-msvideo", "audio/mpeg" -> DocumentFormat.VIDEO;
             default -> throw new IllegalArgumentException("File type not allowed: " + detectedMimeType);
         };
         document.setFormat(format);
@@ -191,7 +211,7 @@ public class FileUtil {
         }
     }
 
-    public String encryptFile(MultipartFile file, String documentCode) throws Exception {
+    public String encryptFile(MultipartFile file, Document document) throws Exception {
         // Tạo thư mục doc nếu chưa tồn tại
         File docDirectory = new File(uploadDir, "doc");
         if (!docDirectory.exists()) {
@@ -199,8 +219,8 @@ public class FileUtil {
         }
 
         InputStream inputStream = file.getInputStream();
-        String extension = FilenameUtils.getExtension(file.getOriginalFilename());
-        String fileName = documentCode + "." + extension;
+        String extension = FilenameUtils.getExtension(document.getName());
+        String fileName = document.getCode() + "." + extension;
         Path filePath = Paths.get(uploadDir, "doc", fileName);
         File outputFile = filePath.toFile();
 
@@ -221,7 +241,9 @@ public class FileUtil {
         return filePath.toString();
     }
 
-    public String generatePreview(MultipartFile file, String documentCode, DocumentFormat format) throws Exception {
+    public String generatePreview(MultipartFile file, Document document) throws Exception {
+        String documentCode = document.getCode();
+        DocumentFormat format = document.getFormat();
         // Tạo thư mục preview nếu chưa tồn tại
         File previewDirectory = new File(uploadDir, "preview");
         if (!previewDirectory.exists()) {
@@ -467,6 +489,8 @@ public class FileUtil {
                     }
                 }
             }
+            // thêm quy tắc bảo mật trước khi trả tài liệu cho user
+            applyPdfSecurity(document);
 
             document.save(baos);
             return baos.toByteArray();
@@ -563,6 +587,32 @@ public class FileUtil {
                 "y=10";
     }
 
+    /**
+     * Áp dụng bảo mật cơ bản cho PDF - chặn copy, print, modify
+     */
+    private void applyPdfSecurity(PDDocument document) {
+        try {
+            // Tạo AccessPermission - chặn các thao tác
+            AccessPermission ap = new AccessPermission();
+            ap.setCanExtractContent(false); // Chặn copy text
+            ap.setCanPrint(false); // Chặn print
+            ap.setCanModify(false); // Chặn sửa
+            ap.setCanModifyAnnotations(false); // Chặn sửa annotation
+            ap.setCanFillInForm(false); // Chặn fill form
+
+            // Tạo protection policy không cần password
+            StandardProtectionPolicy spp = new StandardProtectionPolicy("", "", ap);
+            spp.setEncryptionKeyLength(128);
+
+            // Áp dụng bảo vệ
+            document.protect(spp);
+
+        } catch (Exception e) {
+            log.warn("Failed to apply PDF security: {}", e.getMessage());
+            // Không throw exception để không làm fail quá trình watermark
+        }
+    }
+
     public String uploadNotEncryptFile(MultipartFile file, String documentCode) throws Exception {
         // Tạo thư mục doc nếu chưa tồn tại
         File docDirectory = new File(uploadDir, "doc");
@@ -586,11 +636,10 @@ public class FileUtil {
         return filePath.toString();
     }
 
-    public byte[] getPreviewImage(String previewPath) throws IOException {
-        Path path = Paths.get(previewPath);
-        if (Files.exists(path)) {
-            return Files.readAllBytes(path);
+    public byte[] getPreviewImage(Path previewPath) throws IOException {
+        if (Files.exists(previewPath)) {
+            return Files.readAllBytes(previewPath);
         }
-        throw new IOException("Preview image not found: " + previewPath);
+        throw new IOException("Preview image not found: " + previewPath.toString());
     }
 }

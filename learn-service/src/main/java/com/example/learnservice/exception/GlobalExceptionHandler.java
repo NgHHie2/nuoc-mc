@@ -1,10 +1,12 @@
 package com.example.learnservice.exception;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,11 +15,15 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleException(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleException(Exception ex) {
         Map<String, Object> error = new HashMap<>();
         error.put("error", "Internal Server Error");
         error.put("message", ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON) // <- ép JSON
+                .body(error);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -33,6 +39,12 @@ public class GlobalExceptionHandler {
         error.put("error", "Invalid Request");
         error.put("message", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<?> handleResponseStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(Map.of("message", ex.getReason(), "status", ex.getStatusCode().value()));
     }
 
     @ExceptionHandler(NumberFormatException.class)

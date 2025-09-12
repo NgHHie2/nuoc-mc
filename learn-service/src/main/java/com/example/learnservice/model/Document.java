@@ -27,8 +27,13 @@ public class Document {
     @Column(unique = true)
     private String code;
 
+    private String documentNumber;
+
     @Enumerated(EnumType.STRING)
     private DocumentFormat format; // PDF hoặc VIDEO
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
     private Long size; // Kích thước (dung lượng) tính bằng bytes
     private Integer pages; // Số trang (cho PDF)
