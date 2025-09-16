@@ -1,19 +1,53 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
+    <meta charset="UTF-8">
     <title>Video Test</title>
+    <style>
+        body { font-family: sans-serif; }
+        video { width: 800px; height: 600px; background: #000; }
+        img { max-width: 300px; display: block; margin-top: 1rem; }
+    </style>
 </head>
 <body>
     <h1>Video Watermark Test</h1>
-    
-    <!-- Video sẽ tự động gửi Range requests -->
-    <video controls crossorigin="use-credentials" width="800" height="600">
-        <source src="http://127.0.0.1:8080/document/stream/7d13b3a8-a1c3-4945-89d4-18714e6cfe48.mp4" type="video/mp4">
-        Your browser does not support the video tag.
+
+    <!-- Video -->
+    <video id="myVideo" controls crossorigin="use-credentials">
+        <source id="videoSource"
+                src="http://127.0.0.1:8080/document/stream/5c51a77b-4d6b-40a0-a0b9-aa0899ad3ddf"
+                type="video/mp4">
+        Trình duyệt của bạn không hỗ trợ video tag.
     </video>
-    
+
     <!-- Preview thumbnail -->
     <h2>Preview:</h2>
-    <img src="http://127.0.0.1:8080/document/preview/7d13b3a8-a1c3-4945-89d4-18714e6cfe48" crossorigin="use-credentials" alt="Preview" style="max-width: 300px;">
+    <img src="http://127.0.0.1:8080/document/preview/5c51a77b-4d6b-40a0-a0b9-aa0899ad3ddf"
+         crossorigin="use-credentials"
+         alt="Preview">
+
+    <script>
+        const video = document.getElementById('myVideo');
+        const source = document.getElementById('videoSource');
+        const baseUrl = source.src;
+        let retryCount = 0;
+        const maxRetries = 3;
+        const retryDelay = 3000; // ms
+
+        video.addEventListener('error', () => {
+            if (retryCount < maxRetries) {
+                retryCount++;
+                console.warn(`Video lỗi. Đang thử tải lại lần ${retryCount}/${maxRetries}...`);
+                setTimeout(() => {
+                    // Thêm query để tránh cache
+                    source.src = `${baseUrl}?retry=${Date.now()}`;
+                    video.load();
+                    video.play().catch(() => {});
+                }, retryDelay);
+            } else {
+                console.error("Không thể tải video sau nhiều lần thử.");
+            }
+        });
+    </script>
 </body>
 </html>

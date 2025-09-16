@@ -43,18 +43,6 @@ public class RedisTokenService {
         }
     }
 
-    private List<Long> getPositionsByAccount(Long accountId) {
-        try {
-            List<AccountPosition> accountPositions = accountPositionService.getPositionsByAccount(accountId);
-            return accountPositions.stream()
-                    .map(ap -> ap.getPosition().getId())
-                    .collect(Collectors.toList());
-        } catch (Exception e) {
-            log.warn("Cannot get positions for account {}: {}", accountId, e.getMessage());
-            return List.of();
-        }
-    }
-
     /**
      * Lấy thông tin token từ Redis
      */
@@ -90,6 +78,21 @@ public class RedisTokenService {
             log.info("Revoked token - accId: {}", accountId);
         } catch (Exception e) {
             log.error("Failed to revoke token - accId: {}, Error: {}", accountId, e.getMessage());
+        }
+    }
+
+    /*
+     * Lấy danh sách các id position của một account (để lưu vào redis)
+     */
+    private List<Long> getPositionsByAccount(Long accountId) {
+        try {
+            List<AccountPosition> accountPositions = accountPositionService.getPositionsByAccount(accountId);
+            return accountPositions.stream()
+                    .map(ap -> ap.getPosition().getId())
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Cannot get positions for account {}: {}", accountId, e.getMessage());
+            return List.of();
         }
     }
 

@@ -54,4 +54,13 @@ public class GlobalExceptionHandler {
         error.put("message", "X-User-Id header must be a valid number");
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
+
+    @ExceptionHandler(NullPointerException.class)
+    public ResponseEntity<?> handleNullPointer(NullPointerException ex) {
+        Map<String, Object> error = new HashMap<>();
+        error.put("error", "Resource Not Found");
+        error.put("message", "The requested resource does not exist");
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
+
 }

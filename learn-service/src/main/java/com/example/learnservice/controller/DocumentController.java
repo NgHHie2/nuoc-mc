@@ -1,8 +1,13 @@
 package com.example.learnservice.controller;
 
+import com.example.learnservice.annotation.RequireRole;
+import com.example.learnservice.dto.DocumentSearchDTO;
+import com.example.learnservice.dto.DocumentUpdateRequest;
 import com.example.learnservice.dto.DocumentUploadRequest;
 import com.example.learnservice.enums.DocumentFormat;
+import com.example.learnservice.model.Catalog;
 import com.example.learnservice.model.Document;
+import com.example.learnservice.model.Tag;
 import com.example.learnservice.repository.DocumentRepository;
 import com.example.learnservice.service.DocumentService;
 import com.example.learnservice.util.FileUtil;
@@ -18,6 +23,8 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRange;
@@ -30,6 +37,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -42,17 +50,11 @@ import java.util.concurrent.TimeUnit;
 @RestController
 @RequestMapping("/document")
 public class DocumentController {
-    @Value("${file.upload.dir:./uploads}")
-    private String uploadDir;
-
     @Autowired
     private FileUtil fileUtil;
 
     @Autowired
     private DocumentService documentService;
-
-    @Autowired
-    private DocumentRepository documentRepository;
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
     public ResponseEntity<?> uploadFile(
@@ -72,7 +74,7 @@ public class DocumentController {
             response.put("id", savedDocument.getId());
             response.put("code", savedDocument.getCode());
             response.put("fileName", savedDocument.getName());
-            response.put("filePath", savedDocument.getFilePath());
+            // response.put("filePath", savedDocument.getFilePath());
             response.put("fileSize", savedDocument.getSize());
             response.put("fileType", savedDocument.getFormat());
             response.put("pages", savedDocument.getPages());
@@ -127,9 +129,9 @@ public class DocumentController {
      * Stream video với hỗ trợ HTTP Range requests
      * 
      */
-    @GetMapping("/stream/{fileName}")
+    @GetMapping("/stream/{fileCode}")
     public ResponseEntity<ResourceRegion> streamVideo(
-            @PathVariable String fileName,
+            @PathVariable String fileCode,
             @RequestHeader HttpHeaders headers,
             HttpServletRequest request) throws Exception {
 
@@ -138,30 +140,32 @@ public class DocumentController {
             return ResponseEntity.badRequest().build();
         }
 
-        String sanitizedFileName = FilenameUtils.getName(fileName);
-        Path filePath = Paths.get(uploadDir, "doc", sanitizedFileName);
+        Document document = documentService.getDocumentByCode(fileCode);
+        Path filePath = documentService.getDocumentPath(document);
+
+        System.out.println(filePath.toString());
 
         if (!Files.exists(filePath)) {
             return ResponseEntity.notFound().build();
         }
 
-        String documentCode = FilenameUtils.getBaseName(sanitizedFileName);
-        Optional<Document> documentOpt = documentRepository.findByCode(documentCode);
-        if (documentOpt.isEmpty() || documentOpt.get().getFormat() != DocumentFormat.VIDEO) {
+        if (document == null || document.getFormat() != DocumentFormat.VIDEO) {
             return ResponseEntity.notFound().build();
         }
 
         // Tạo cached watermarked file nếu chưa có
-        String cacheKey = documentCode + "_" + cccd;
-        File cachedFile = new File("D:/temp/cache_" + cacheKey + ".mp4");
-        if (!cachedFile.exists()) {
-            byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
-            byte[] watermarkedContent = fileUtil.addVideoWatermark(decryptedContent, cccd);
-            Files.write(cachedFile.toPath(), watermarkedContent);
-            log.info("Created and cached watermarked video for {}", documentCode);
-        }
+        // String cacheKey = fileCode + "_" + cccd;
+        // File cachedFile = new File("D:/temp/cache_" + cacheKey + ".mp4");
+        // if (!cachedFile.exists()) {
+        // byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
+        // byte[] watermarkedContent = fileUtil.addVideoWatermark(decryptedContent,
+        // cccd);
+        // // byte[] watermarkedContent = decryptedContent;
+        // Files.write(cachedFile.toPath(), watermarkedContent);
+        // log.info("Created and cached watermarked video for {}", documentCode);
+        // }
 
-        FileSystemResource videoResource = new FileSystemResource(cachedFile);
+        FileSystemResource videoResource = new FileSystemResource(filePath);
         long contentLength = videoResource.contentLength();
 
         // Xử lý Range header (nếu có)
@@ -186,29 +190,154 @@ public class DocumentController {
 
     /**
      * Get preview image
+     * 
+     * @throws IOException
      */
     @GetMapping("/preview/{documentCode}")
-    public ResponseEntity<byte[]> getPreview(@PathVariable String documentCode) {
+    public ResponseEntity<byte[]> getPreview(@PathVariable String documentCode) throws IOException {
+        Document document = documentService.getDocumentByCode(documentCode);
+
+        Path previewPath = documentService.getPreviewPath(document);
+        byte[] previewBytes = fileUtil.getPreviewImage(previewPath);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .body(previewBytes);
+    }
+
+    /**
+     * Tìm kiếm tài liệu theo từ khóa, theo format hoặc catalog với phân trang
+     * Quyền: Có thể cho phép tất cả user hoặc chỉ ADMIN/TEACHER tùy yêu cầu
+     * 
+     * Input:
+     * - keyword (optional): Từ khóa tìm kiếm trong name, documentNumber, tags
+     * - format (optional): Lọc theo định dạng (PDF, VIDEO)
+     * - catalogIds (optional): Danh sách ID các position (thông qua catalog)
+     * - searchFields (optional): Các trường cụ thể muốn tìm kiếm theo keyword
+     * - pageable: Thông tin phân trang (page, size, sort)
+     * 
+     * Output:
+     * - Page<Document>: Danh sách tài liệu phân trang với metadata
+     */
+    @GetMapping("/search")
+    public Page<Document> searchDocuments(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "format", required = false) DocumentFormat format,
+            @RequestParam(value = "catalogIds", required = false) List<Long> catalogIds,
+            @RequestParam(value = "searchFields", required = false) List<String> searchFields,
+            Pageable pageable) {
+
+        DocumentSearchDTO searchDTO = new DocumentSearchDTO();
+        searchDTO.setKeyword(keyword);
+        searchDTO.setFormat(format);
+        searchDTO.setCatalogIds(catalogIds);
+        searchDTO.setSearchFields(searchFields);
+
+        return documentService.universalSearch(searchDTO, pageable);
+    }
+
+    @GetMapping("/{code}")
+    public Document getDocumentByCode(@PathVariable String code) {
+        log.info("get document by code: " + code);
+        return documentService.getDocumentByCode(code);
+    }
+
+    /**
+     * Cập nhật thông tin tài liệu
+     */
+    @PutMapping("/{documentCode}")
+    public ResponseEntity<?> updateDocument(
+            @PathVariable String documentCode,
+            @Valid @RequestBody DocumentUpdateRequest updateRequest,
+            HttpServletRequest request) {
         try {
-            Optional<Document> documentOpt = documentRepository.findByCode(documentCode);
-            if (documentOpt.isEmpty()) {
-                return ResponseEntity.notFound().build();
+            // Lấy User ID từ header
+            String userIdHeader = request.getHeader("X-User-Id");
+            if (userIdHeader == null || userIdHeader.trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "X-User-Id header is required"));
             }
 
-            Document document = documentOpt.get();
-            if (document.getPreviewPath() == null) {
-                return ResponseEntity.notFound().build();
+            Long userId = Long.valueOf(userIdHeader);
+
+            Document updatedDocument = documentService.updateDocument(documentCode, updateRequest, userId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", updatedDocument.getId());
+            response.put("code", updatedDocument.getCode());
+            response.put("name", updatedDocument.getName());
+            response.put("documentNumber", updatedDocument.getDocumentNumber());
+            response.put("description", updatedDocument.getDescription());
+            response.put("format", updatedDocument.getFormat());
+            response.put("updatedAt", updatedDocument.getUpdatedAt());
+
+            // Tags
+            if (updatedDocument.getTags() != null) {
+                List<String> tagNames = updatedDocument.getTags().stream()
+                        .map(Tag::getName)
+                        .toList();
+                response.put("tags", tagNames);
             }
-            Path previewPath = Paths.get(uploadDir, "preview", document.getCode() + ".jpg");
-            byte[] previewBytes = fileUtil.getPreviewImage(previewPath);
 
-            return ResponseEntity.ok()
-                    .contentType(MediaType.IMAGE_JPEG)
-                    .body(previewBytes);
+            // Catalogs
+            if (updatedDocument.getCatalogs() != null) {
+                List<Long> positionIds = updatedDocument.getCatalogs().stream()
+                        .map(Catalog::getPositionId)
+                        .toList();
+                response.put("catalogs", positionIds);
+            }
 
+            return ResponseEntity.ok(response);
+
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("message", e.getReason()));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Invalid User ID format"));
         } catch (Exception e) {
-            log.error("Error getting preview", e);
-            return ResponseEntity.notFound().build();
+            log.error("Error updating document: ", e);
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Failed to update document: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Xóa tài liệu
+     */
+    @DeleteMapping("/{documentCode}")
+    public ResponseEntity<?> deleteDocument(
+            @PathVariable String documentCode,
+            HttpServletRequest request) {
+        try {
+            // Lấy User ID từ header
+            String userIdHeader = request.getHeader("X-User-Id");
+            if (userIdHeader == null || userIdHeader.trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "X-User-Id header is required"));
+            }
+
+            Long userId = Long.valueOf(userIdHeader);
+
+            documentService.deleteDocument(documentCode, userId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Document deleted successfully");
+            response.put("documentCode", documentCode);
+            response.put("deletedAt", java.time.LocalDateTime.now());
+
+            return ResponseEntity.ok(response);
+
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("message", e.getReason()));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Invalid User ID format"));
+        } catch (Exception e) {
+            log.error("Error deleting document: ", e);
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Failed to delete document: " + e.getMessage()));
         }
     }
 }

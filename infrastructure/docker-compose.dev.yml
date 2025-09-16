@@ -42,6 +42,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=1111
       # Kafka connection cho Docker (nếu có)
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - API_GATEWAT_URL= https://vigilant-umbrella-g46j7p5j4x7gcvjjj-8080.app.github.dev
     depends_on:
       - eureka-server
       - postgres-account

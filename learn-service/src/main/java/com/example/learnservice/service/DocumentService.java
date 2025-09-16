@@ -5,25 +5,38 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.learnservice.dto.DocumentSearchDTO;
+import com.example.learnservice.dto.DocumentUpdateRequest;
 import com.example.learnservice.dto.DocumentUploadRequest;
 import com.example.learnservice.enums.DocumentFormat;
 import com.example.learnservice.model.Catalog;
 import com.example.learnservice.model.Document;
 import com.example.learnservice.model.Tag;
+import com.example.learnservice.repository.CatalogRepository;
 import com.example.learnservice.repository.DocumentRepository;
+import com.example.learnservice.repository.TagRepository;
+import com.example.learnservice.specification.DocumentSpecification;
 import com.example.learnservice.util.FileUtil;
 
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +46,12 @@ import lombok.extern.slf4j.Slf4j;
 public class DocumentService {
     @Autowired
     private DocumentRepository documentRepository;
+
+    @Autowired
+    private TagRepository tagRepository;
+
+    @Autowired
+    private CatalogRepository catalogRepository;
 
     @Autowired
     private FileUtil fileUtil;
@@ -65,12 +84,13 @@ public class DocumentService {
         fileUtil.analyzeFileContent(file, document);
 
         // Mã hóa và lưu file với tên là documentCode
-        String filePath = fileUtil.encryptFile(file, document);
-        document.setFilePath(filePath);
+        // String filePath = fileUtil.encryptFile(file, document);
+        String filePath = fileUtil.uploadNotEncryptFile(file, document);
+        // document.setFilePath(filePath);
 
         // Tạo preview image
         String previewPath = fileUtil.generatePreview(file, document);
-        document.setPreviewPath(previewPath);
+        // document.setPreviewPath(previewPath);
 
         // Lưu document trước để có ID
         Document savedDocument = documentRepository.save(document);
@@ -129,6 +149,16 @@ public class DocumentService {
         return filePath;
     }
 
+    public Path getPreviewPath(Document document) {
+        String fileName = document.getCode() + ".jpg";
+        Path filePath = Paths.get(uploadDir, "preview", fileName);
+        if (!Files.exists(filePath)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found");
+        }
+
+        return filePath;
+    }
+
     public boolean checkDocumentAccess(Document document, List<Long> positions) {
         List<Long> required = document.getCatalogs().stream().map(Catalog::getPositionId).toList();
         if (Collections.disjoint(positions, required))
@@ -138,17 +168,200 @@ public class DocumentService {
 
     public byte[] getFileContent(Path filePath, Document document, String cccd) throws Exception {
         // Giải mã file gốc
-        byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
+        // byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
+        byte[] decryptedContent = fileUtil.getFileContent(filePath.toFile());
 
         // Thêm watermark dựa theo format
         byte[] watermarkedContent = null;
 
         if (document.getFormat() == DocumentFormat.PDF) {
             watermarkedContent = fileUtil.addWatermark(decryptedContent, cccd);
-        } else if (document.getFormat() == DocumentFormat.VIDEO) {
-            watermarkedContent = fileUtil.addVideoWatermark(decryptedContent, cccd);
         }
+        // else if (document.getFormat() == DocumentFormat.VIDEO) {
+        // watermarkedContent = fileUtil.addVideoWatermark(decryptedContent, cccd);
+        // }
 
         return watermarkedContent;
     }
+
+    /**
+     * Tìm kiếm tài liệu với các tiêu chí đa dạng và phân trang
+     * 
+     * @param searchDTO - Chứa các tiêu chí tìm kiếm
+     * @param pageable  - Thông tin phân trang
+     * @return Page<Document> - Kết quả phân trang
+     */
+    public Page<Document> universalSearch(DocumentSearchDTO searchDTO, Pageable pageable) {
+        Specification<Document> spec = DocumentSpecification.build(searchDTO);
+        return documentRepository.findAll(spec, pageable);
+    }
+
+    /**
+     * Cập nhật thông tin tài liệu
+     */
+    @Transactional
+    public Document updateDocument(String documentCode, DocumentUpdateRequest request, Long userId) {
+        // Tìm document theo code
+        Optional<Document> documentOpt = documentRepository.findByCode(documentCode);
+        if (documentOpt.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found with code: " + documentCode);
+        }
+
+        Document document = documentOpt.get();
+
+        // Cập nhật các trường thông tin cơ bản
+        if (request.getName() != null && !request.getName().trim().isEmpty()) {
+            document.setName(request.getName().trim());
+        }
+
+        if (request.getDocumentNumber() != null) {
+            document.setDocumentNumber(request.getDocumentNumber().trim());
+        }
+
+        if (request.getDescription() != null) {
+            document.setDescription(request.getDescription().trim());
+        }
+
+        // Cập nhật user thay đổi
+        document.setUpdatedBy(userId);
+
+        // Cập nhật Tags - chỉ cập nhật khi có thay đổi
+        if (request.getTags() != null) {
+            updateTags(document, request.getTags());
+        }
+
+        // Cập nhật Catalogs - chỉ cập nhật khi có thay đổi
+        if (request.getCatalogs() != null) {
+            updateCatalogs(document, request.getCatalogs(), userId);
+        }
+
+        return documentRepository.save(document);
+    }
+
+    private void updateTags(Document document, List<String> newTagNames) {
+        Set<String> currentTagNames = document.getTags().stream()
+                .map(Tag::getName)
+                .collect(Collectors.toSet());
+
+        Set<String> requestedTagNames = newTagNames.stream()
+                .filter(name -> name != null && !name.trim().isEmpty())
+                .map(String::trim)
+                .collect(Collectors.toSet());
+
+        if (currentTagNames.equals(requestedTagNames)) {
+            return;
+        }
+
+        Set<String> tagsToRemove = new HashSet<>(currentTagNames);
+        tagsToRemove.removeAll(requestedTagNames);
+
+        Set<String> tagsToAdd = new HashSet<>(requestedTagNames);
+        tagsToAdd.removeAll(currentTagNames);
+
+        if (!tagsToRemove.isEmpty()) {
+            List<Tag> tagsToDelete = document.getTags().stream()
+                    .filter(tag -> tagsToRemove.contains(tag.getName()))
+                    .collect(Collectors.toList());
+
+            tagRepository.deleteAll(tagsToDelete);
+            document.getTags().removeAll(tagsToDelete);
+
+            log.debug("Removed tags: {}", tagsToRemove);
+        }
+
+        if (!tagsToAdd.isEmpty()) {
+            List<Tag> newTags = new ArrayList<>();
+            for (String tagName : tagsToAdd) {
+                Tag newTag = new Tag();
+                newTag.setName(tagName);
+                newTag.setDocument(document);
+                newTags.add(newTag);
+            }
+
+            List<Tag> savedTags = tagRepository.saveAll(newTags);
+            document.getTags().addAll(savedTags);
+
+            log.debug("Added tags: {}", tagsToAdd);
+        }
+    }
+
+    private void updateCatalogs(Document document, List<Long> newPositionIds, Long userId) {
+        Set<Long> currentPositionIds = document.getCatalogs().stream()
+                .map(Catalog::getPositionId)
+                .collect(Collectors.toSet());
+
+        Set<Long> requestedPositionIds = newPositionIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (currentPositionIds.equals(requestedPositionIds)) {
+            return;
+        }
+
+        Set<Long> catalogsToRemove = new HashSet<>(currentPositionIds);
+        catalogsToRemove.removeAll(requestedPositionIds);
+
+        Set<Long> catalogsToAdd = new HashSet<>(requestedPositionIds);
+        catalogsToAdd.removeAll(currentPositionIds);
+
+        if (!catalogsToRemove.isEmpty()) {
+            List<Catalog> catalogsToDelete = document.getCatalogs().stream()
+                    .filter(catalog -> catalogsToRemove.contains(catalog.getPositionId()))
+                    .collect(Collectors.toList());
+
+            catalogRepository.deleteAll(catalogsToDelete);
+            document.getCatalogs().removeAll(catalogsToDelete);
+
+            log.debug("Removed catalogs: {}", catalogsToRemove);
+        }
+
+        if (!catalogsToAdd.isEmpty()) {
+            List<Catalog> newCatalogs = new ArrayList<>();
+            for (Long positionId : catalogsToAdd) {
+                Catalog newCatalog = new Catalog();
+                newCatalog.setPositionId(positionId);
+                newCatalog.setDocument(document);
+                newCatalog.setCreatedBy(userId);
+                newCatalog.setUpdatedBy(userId);
+                newCatalogs.add(newCatalog);
+            }
+
+            List<Catalog> savedCatalogs = catalogRepository.saveAll(newCatalogs);
+            document.getCatalogs().addAll(savedCatalogs);
+
+            log.debug("Added catalogs: {}", catalogsToAdd);
+        }
+
+        List<Catalog> remainingCatalogs = document.getCatalogs().stream()
+                .filter(catalog -> !catalogsToAdd.contains(catalog.getPositionId()))
+                .collect(Collectors.toList());
+
+        if (!remainingCatalogs.isEmpty()) {
+            remainingCatalogs.forEach(catalog -> catalog.setUpdatedBy(userId));
+            catalogRepository.saveAll(remainingCatalogs);
+        }
+    }
+
+    /**
+     * Xóa tài liệu
+     */
+    @Transactional
+    public void deleteDocument(String documentCode, Long userId) {
+        Optional<Document> documentOpt = documentRepository.findByCode(documentCode);
+        if (documentOpt.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found with code: " + documentCode);
+        }
+
+        Document document = documentOpt.get();
+
+        // Log thông tin trước khi xóa
+        log.info("Deleting document: {} (Code: {}) by user: {}",
+                document.getName(), document.getCode(), userId);
+
+        // Xóa document (cascade sẽ tự động xóa tags và catalogs)
+        documentRepository.delete(document);
+
+        log.info("Document deleted successfully: {}", documentCode);
+    }
+
 }

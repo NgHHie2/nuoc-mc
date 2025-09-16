@@ -442,6 +442,19 @@ public class FileUtil {
         }
     }
 
+    public byte[] getFileContent(File inputFile) throws IOException {
+        try (FileInputStream fis = new FileInputStream(inputFile);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = fis.read(buffer)) != -1) {
+                baos.write(buffer, 0, bytesRead);
+            }
+            return baos.toByteArray();
+        }
+    }
+
     /**
      * Thêm watermark động (theo CCCD) vào PDF
      */
@@ -613,26 +626,27 @@ public class FileUtil {
         }
     }
 
-    public String uploadNotEncryptFile(MultipartFile file, String documentCode) throws Exception {
+    public String uploadNotEncryptFile(MultipartFile file, Document document) throws IOException {
         // Tạo thư mục doc nếu chưa tồn tại
         File docDirectory = new File(uploadDir, "doc");
         if (!docDirectory.exists()) {
             docDirectory.mkdirs();
         }
 
-        InputStream inputStream = file.getInputStream();
-        String extension = FilenameUtils.getExtension(file.getOriginalFilename());
-        String fileName = documentCode + "." + extension;
+        String extension = FilenameUtils.getExtension(document.getName());
+        String fileName = document.getCode() + "." + extension;
         Path filePath = Paths.get(uploadDir, "doc", fileName);
-        File outputFile = filePath.toFile();
 
-        try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+        try (
+                InputStream inputStream = file.getInputStream();
+                FileOutputStream fos = new FileOutputStream(filePath.toFile())) {
             byte[] buffer = new byte[8192]; // 8KB buffer
             int bytesRead;
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 fos.write(buffer, 0, bytesRead);
             }
         }
+
         return filePath.toString();
     }
 

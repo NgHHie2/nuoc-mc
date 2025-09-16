@@ -46,6 +46,19 @@ public class AuthController {
     @Autowired
     private HttpServletRequest request;
 
+    /**
+     * Đăng nhập vào hệ thống
+     * Account service sẽ tạo jwt và lưu thông tin cần thiết của account vào redis
+     * nếu đăng nhập thành công
+     * 
+     * Input:
+     * - username
+     * - password
+     * 
+     * Output:
+     * - Trả về thông báo thành công hoặc thất bại tùy trường hợp.
+     * - Nếu đăng nhập thành công thì trong response có gắn kèm cookie chứa jwt.
+     */
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginDTO loginRequest, HttpServletResponse response) {
         try {
@@ -87,6 +100,16 @@ public class AuthController {
         }
     }
 
+    /**
+     * Đăng xuất khỏi hệ thống
+     * Xóa thông tin account khỏi redis
+     * 
+     * Input:
+     * 
+     * Output:
+     * - Trả về thông báo thành công hoặc thất bại tùy trường hợp.
+     * - Nếu đăng xuất thành công thì response set jwt về null.
+     */
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletResponse response) {
         String userIdHeader = request.getHeader("X-User-Id");
