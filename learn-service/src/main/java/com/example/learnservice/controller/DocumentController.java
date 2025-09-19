@@ -112,7 +112,7 @@ public class DocumentController {
         String encodedFileName = URLEncoder.encode(document.getName(), StandardCharsets.UTF_8)
                 .replace("+", "%20");
 
-        String contentDisposition = "attachment; filename*=UTF-8''" + encodedFileName;
+        String contentDisposition = "inline; filename*=UTF-8''" + encodedFileName;
 
         // Tạo InputStreamResource
         ByteArrayInputStream inputStream = new ByteArrayInputStream(watermarkedContent);
@@ -174,10 +174,10 @@ public class DocumentController {
             HttpRange range = headers.getRange().get(0);
             long start = range.getRangeStart(contentLength);
             long end = range.getRangeEnd(contentLength);
-            long rangeLength = Math.min(1 * 1024 * 1024, end - start + 1); // chunk ~1MB
+            long rangeLength = Math.min(5 * 1024 * 1024, end - start + 1); // chunk ~1MB
             region = new ResourceRegion(videoResource, start, rangeLength);
         } else {
-            long rangeLength = Math.min(1 * 1024 * 1024, contentLength);
+            long rangeLength = Math.min(5 * 1024 * 1024, contentLength);
             region = new ResourceRegion(videoResource, 0, rangeLength);
         }
 
