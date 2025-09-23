@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -41,48 +42,29 @@ public class CatalogController {
     public ResponseEntity<?> updateCatalogsDocument(
             @PathVariable String documentCode,
             @Valid @RequestBody CatalogUpdateRequest updateRequest,
-            HttpServletRequest request) {
-        try {
-            // Lấy User ID từ header
-            String userIdHeader = request.getHeader("X-User-Id");
-            if (userIdHeader == null || userIdHeader.trim().isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("message", "X-User-Id header is required"));
-            }
-
-            Long userId = Long.valueOf(userIdHeader);
-            List<Long> newPositionIds = updateRequest.getCatalogs();
-            Document document = documentService.getDocumentByCode(documentCode);
-            Document updatedDocument = null;
-            if (document != null) {
-                catalogService.updateCatalogs(document, newPositionIds, userId);
-                updatedDocument = documentService.getDocumentByCode(documentCode);
-            }
-
-            Map<String, Object> response = new HashMap<>();
-
-            // Catalogs
-            if (updatedDocument != null && updatedDocument.getCatalogs() != null) {
-                List<Long> positionIds = updatedDocument.getCatalogs().stream()
-                        .map(Catalog::getPositionId)
-                        .toList();
-                System.out.println(documentCode);
-                System.out.println(positionIds);
-                response.put("catalogs", positionIds);
-            }
-
-            return ResponseEntity.ok(response);
-
-        } catch (ResponseStatusException e) {
-            return ResponseEntity.status(e.getStatusCode())
-                    .body(Map.of("message", e.getReason()));
-        } catch (NumberFormatException e) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid User ID format"));
-        } catch (Exception e) {
-            log.error("Error updating document: ", e);
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Failed to update document: " + e.getMessage()));
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+        Long userId = Long.valueOf(userIdStr);
+        List<Long> newPositionIds = updateRequest.getCatalogs();
+        Document document = documentService.getDocumentByCode(documentCode);
+        Document updatedDocument = null;
+        if (document != null) {
+            catalogService.updateCatalogs(document, newPositionIds, userId);
+            updatedDocument = documentService.getDocumentByCode(documentCode);
         }
+
+        Map<String, Object> response = new HashMap<>();
+
+        // Catalogs
+        if (updatedDocument != null && updatedDocument.getCatalogs() != null) {
+            List<Long> positionIds = updatedDocument.getCatalogs().stream()
+                    .map(Catalog::getPositionId)
+                    .toList();
+            System.out.println(documentCode);
+            System.out.println(positionIds);
+            response.put("catalogs", positionIds);
+        }
+
+        return ResponseEntity.ok(response);
+
     }
 }

@@ -31,6 +31,8 @@ public class Classroom {
     @NotBlank(message = "Class name is required")
     private String name;
 
+    private Integer limitQuantity = 20;
+
     @OneToMany(mappedBy = "classroom", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<ClassroomAccount> classroomAccounts;
 

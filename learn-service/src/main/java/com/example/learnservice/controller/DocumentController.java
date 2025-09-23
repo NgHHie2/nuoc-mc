@@ -249,57 +249,29 @@ public class DocumentController {
     public ResponseEntity<?> updateDocument(
             @PathVariable String documentCode,
             @Valid @RequestBody DocumentUpdateRequest updateRequest,
-            HttpServletRequest request) {
-        try {
-            // Lấy User ID từ header
-            String userIdHeader = request.getHeader("X-User-Id");
-            if (userIdHeader == null || userIdHeader.trim().isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("message", "X-User-Id header is required"));
-            }
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+        Long userId = Long.valueOf(userIdStr);
+        Document updatedDocument = documentService.updateDocument(documentCode, updateRequest, userId);
 
-            Long userId = Long.valueOf(userIdHeader);
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", updatedDocument.getId());
+        response.put("code", updatedDocument.getCode());
+        response.put("name", updatedDocument.getName());
+        response.put("documentNumber", updatedDocument.getDocumentNumber());
+        response.put("description", updatedDocument.getDescription());
+        response.put("format", updatedDocument.getFormat());
+        response.put("updatedAt", updatedDocument.getUpdatedAt());
 
-            Document updatedDocument = documentService.updateDocument(documentCode, updateRequest, userId);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("id", updatedDocument.getId());
-            response.put("code", updatedDocument.getCode());
-            response.put("name", updatedDocument.getName());
-            response.put("documentNumber", updatedDocument.getDocumentNumber());
-            response.put("description", updatedDocument.getDescription());
-            response.put("format", updatedDocument.getFormat());
-            response.put("updatedAt", updatedDocument.getUpdatedAt());
-
-            // Tags
-            if (updatedDocument.getTags() != null) {
-                List<String> tagNames = updatedDocument.getTags().stream()
-                        .map(Tag::getName)
-                        .toList();
-                response.put("tags", tagNames);
-            }
-
-            // Catalogs
-            // if (updatedDocument.getCatalogs() != null) {
-            // List<Long> positionIds = updatedDocument.getCatalogs().stream()
-            // .map(Catalog::getPositionId)
-            // .toList();
-            // response.put("catalogs", positionIds);
-            // }
-
-            return ResponseEntity.ok(response);
-
-        } catch (ResponseStatusException e) {
-            return ResponseEntity.status(e.getStatusCode())
-                    .body(Map.of("message", e.getReason()));
-        } catch (NumberFormatException e) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid User ID format"));
-        } catch (Exception e) {
-            log.error("Error updating document: ", e);
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Failed to update document: " + e.getMessage()));
+        // Tags
+        if (updatedDocument.getTags() != null) {
+            List<String> tagNames = updatedDocument.getTags().stream()
+                    .map(Tag::getName)
+                    .toList();
+            response.put("tags", tagNames);
         }
+
+        return ResponseEntity.ok(response);
+
     }
 
     /**
@@ -308,36 +280,17 @@ public class DocumentController {
     @DeleteMapping("/{documentCode}")
     public ResponseEntity<?> deleteDocument(
             @PathVariable String documentCode,
-            HttpServletRequest request) {
-        try {
-            // Lấy User ID từ header
-            String userIdHeader = request.getHeader("X-User-Id");
-            if (userIdHeader == null || userIdHeader.trim().isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("message", "X-User-Id header is required"));
-            }
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
 
-            Long userId = Long.valueOf(userIdHeader);
+        Long userId = Long.valueOf(userIdStr);
+        documentService.deleteDocument(documentCode, userId);
 
-            documentService.deleteDocument(documentCode, userId);
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Document deleted successfully");
+        response.put("documentCode", documentCode);
+        response.put("deletedAt", java.time.LocalDateTime.now());
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Document deleted successfully");
-            response.put("documentCode", documentCode);
-            response.put("deletedAt", java.time.LocalDateTime.now());
+        return ResponseEntity.ok(response);
 
-            return ResponseEntity.ok(response);
-
-        } catch (ResponseStatusException e) {
-            return ResponseEntity.status(e.getStatusCode())
-                    .body(Map.of("message", e.getReason()));
-        } catch (NumberFormatException e) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid User ID format"));
-        } catch (Exception e) {
-            log.error("Error deleting document: ", e);
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Failed to delete document: " + e.getMessage()));
-        }
     }
 }
