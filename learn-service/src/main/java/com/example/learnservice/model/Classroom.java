@@ -44,7 +44,6 @@ public class Classroom {
     @JoinColumn(name = "semester_id")
     private Semester semester;
 
-    @JsonIgnore
     @Column(updatable = false)
     private Long createdBy; // ID của account tạo
 

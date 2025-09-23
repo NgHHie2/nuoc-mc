@@ -36,6 +36,7 @@ import com.example.learnservice.model.Catalog;
 import com.example.learnservice.model.Document;
 import com.example.learnservice.model.Tag;
 import com.example.learnservice.repository.CatalogRepository;
+import com.example.learnservice.repository.ClassroomRepository;
 import com.example.learnservice.repository.DocumentRepository;
 import com.example.learnservice.repository.TagRepository;
 import com.example.learnservice.specification.DocumentSpecification;
@@ -51,6 +52,9 @@ public class DocumentService {
 
     @Autowired
     private TagRepository tagRepository;
+
+    @Autowired
+    private ClassroomRepository classroomRepository;
 
     @Autowired
     private FileUtil fileUtil;
@@ -162,9 +166,12 @@ public class DocumentService {
         List<Long> required = document.getCatalogs().stream().map(Catalog::getPositionId).toList();
         if (document.getCreatedBy() == accountId)
             return true;
-        if (Collections.disjoint(positions, required))
-            return false;
-        return true;
+        if (!Collections.disjoint(positions, required))
+            return true;
+        if (classroomRepository.existsByAccountIdAndDocumentCode(accountId, document.getCode()))
+            return true;
+
+        return false;
     }
 
     public byte[] getFileContent(Path filePath, Document document, String cccd) throws Exception {

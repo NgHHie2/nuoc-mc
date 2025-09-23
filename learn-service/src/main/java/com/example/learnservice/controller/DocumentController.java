@@ -136,20 +136,24 @@ public class DocumentController {
             HttpServletRequest request) throws Exception {
 
         String cccd = request.getHeader("X-CCCD");
-        if (cccd == null || cccd.isEmpty()) {
-            return ResponseEntity.badRequest().build();
-        }
+        Long accountId = Long.valueOf(request.getHeader("X-User-Id"));
+        List<Long> positions = Arrays.stream(request.getHeader("X-Positions").split(","))
+                .filter(s -> !s.isBlank())
+                .map(Long::parseLong)
+                .toList();
 
         Document document = documentService.getDocumentByCode(fileCode);
-        Path filePath = documentService.getDocumentPath(document);
-
-        System.out.println(filePath.toString());
-
-        if (!Files.exists(filePath)) {
+        if (document == null || document.getFormat() != DocumentFormat.VIDEO) {
             return ResponseEntity.notFound().build();
         }
 
-        if (document == null || document.getFormat() != DocumentFormat.VIDEO) {
+        if (!documentService.checkDocumentAccess(document, positions, accountId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Permission denied");
+        }
+
+        Path filePath = documentService.getDocumentPath(document);
+
+        if (!Files.exists(filePath)) {
             return ResponseEntity.notFound().build();
         }
 
