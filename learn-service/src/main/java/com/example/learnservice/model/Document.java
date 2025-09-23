@@ -48,6 +48,10 @@ public class Document {
     private List<Tag> tags;
 
     @JsonIgnore
+    @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<ClassroomDocument> classroomDocuments;
+
+    @JsonIgnore
     @Column(updatable = false)
     private Long createdBy; // ID của account tạo
 

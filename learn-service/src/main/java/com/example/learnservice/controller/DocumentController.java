@@ -1,6 +1,7 @@
 package com.example.learnservice.controller;
 
 import com.example.learnservice.annotation.RequireRole;
+import com.example.learnservice.dto.CatalogUpdateRequest;
 import com.example.learnservice.dto.DocumentSearchDTO;
 import com.example.learnservice.dto.DocumentUpdateRequest;
 import com.example.learnservice.dto.DocumentUploadRequest;
@@ -93,15 +94,14 @@ public class DocumentController {
 
         log.info("X-CCCD: " + request.getHeader("X-CCCD"));
         String cccd = request.getHeader("X-CCCD");
-
-        System.out.println(request.getHeader("X-Positions"));
+        Long accountId = Long.valueOf(request.getHeader("X-User-Id"));
         List<Long> positions = Arrays.stream(request.getHeader("X-Positions").split(","))
                 .filter(s -> !s.isBlank())
                 .map(Long::parseLong)
                 .toList();
 
         Document document = documentService.getDocumentByCode(fileCode);
-        if (!documentService.checkDocumentAccess(document, positions)) {
+        if (!documentService.checkDocumentAccess(document, positions, accountId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Permission denied");
         }
         Path filePath = documentService.getDocumentPath(document);
@@ -280,12 +280,12 @@ public class DocumentController {
             }
 
             // Catalogs
-            if (updatedDocument.getCatalogs() != null) {
-                List<Long> positionIds = updatedDocument.getCatalogs().stream()
-                        .map(Catalog::getPositionId)
-                        .toList();
-                response.put("catalogs", positionIds);
-            }
+            // if (updatedDocument.getCatalogs() != null) {
+            // List<Long> positionIds = updatedDocument.getCatalogs().stream()
+            // .map(Catalog::getPositionId)
+            // .toList();
+            // response.put("catalogs", positionIds);
+            // }
 
             return ResponseEntity.ok(response);
 

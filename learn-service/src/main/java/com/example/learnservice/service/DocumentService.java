@@ -17,7 +17,9 @@ import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,9 +51,6 @@ public class DocumentService {
 
     @Autowired
     private TagRepository tagRepository;
-
-    @Autowired
-    private CatalogRepository catalogRepository;
 
     @Autowired
     private FileUtil fileUtil;
@@ -159,8 +158,10 @@ public class DocumentService {
         return filePath;
     }
 
-    public boolean checkDocumentAccess(Document document, List<Long> positions) {
+    public boolean checkDocumentAccess(Document document, List<Long> positions, Long accountId) {
         List<Long> required = document.getCatalogs().stream().map(Catalog::getPositionId).toList();
+        if (document.getCreatedBy() == accountId)
+            return true;
         if (Collections.disjoint(positions, required))
             return false;
         return true;
@@ -192,6 +193,8 @@ public class DocumentService {
      * @return Page<Document> - Kết quả phân trang
      */
     public Page<Document> universalSearch(DocumentSearchDTO searchDTO, Pageable pageable) {
+        Sort sort = pageable.getSort().and(Sort.by(Sort.Direction.DESC, "createdAt"));
+        pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
         Specification<Document> spec = DocumentSpecification.build(searchDTO);
         return documentRepository.findAll(spec, pageable);
     }
@@ -231,9 +234,9 @@ public class DocumentService {
         }
 
         // Cập nhật Catalogs - chỉ cập nhật khi có thay đổi
-        if (request.getCatalogs() != null) {
-            updateCatalogs(document, request.getCatalogs(), userId);
-        }
+        // if (request.getCatalogs() != null) {
+        // updateCatalogs(document, request.getCatalogs(), userId);
+        // }
 
         return documentRepository.save(document);
     }
@@ -282,63 +285,6 @@ public class DocumentService {
             document.getTags().addAll(savedTags);
 
             log.debug("Added tags: {}", tagsToAdd);
-        }
-    }
-
-    private void updateCatalogs(Document document, List<Long> newPositionIds, Long userId) {
-        Set<Long> currentPositionIds = document.getCatalogs().stream()
-                .map(Catalog::getPositionId)
-                .collect(Collectors.toSet());
-
-        Set<Long> requestedPositionIds = newPositionIds.stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        if (currentPositionIds.equals(requestedPositionIds)) {
-            return;
-        }
-
-        Set<Long> catalogsToRemove = new HashSet<>(currentPositionIds);
-        catalogsToRemove.removeAll(requestedPositionIds);
-
-        Set<Long> catalogsToAdd = new HashSet<>(requestedPositionIds);
-        catalogsToAdd.removeAll(currentPositionIds);
-
-        if (!catalogsToRemove.isEmpty()) {
-            List<Catalog> catalogsToDelete = document.getCatalogs().stream()
-                    .filter(catalog -> catalogsToRemove.contains(catalog.getPositionId()))
-                    .collect(Collectors.toList());
-
-            catalogRepository.deleteAll(catalogsToDelete);
-            document.getCatalogs().removeAll(catalogsToDelete);
-
-            log.debug("Removed catalogs: {}", catalogsToRemove);
-        }
-
-        if (!catalogsToAdd.isEmpty()) {
-            List<Catalog> newCatalogs = new ArrayList<>();
-            for (Long positionId : catalogsToAdd) {
-                Catalog newCatalog = new Catalog();
-                newCatalog.setPositionId(positionId);
-                newCatalog.setDocument(document);
-                newCatalog.setCreatedBy(userId);
-                newCatalog.setUpdatedBy(userId);
-                newCatalogs.add(newCatalog);
-            }
-
-            List<Catalog> savedCatalogs = catalogRepository.saveAll(newCatalogs);
-            document.getCatalogs().addAll(savedCatalogs);
-
-            log.debug("Added catalogs: {}", catalogsToAdd);
-        }
-
-        List<Catalog> remainingCatalogs = document.getCatalogs().stream()
-                .filter(catalog -> !catalogsToAdd.contains(catalog.getPositionId()))
-                .collect(Collectors.toList());
-
-        if (!remainingCatalogs.isEmpty()) {
-            remainingCatalogs.forEach(catalog -> catalog.setUpdatedBy(userId));
-            catalogRepository.saveAll(remainingCatalogs);
         }
     }
 

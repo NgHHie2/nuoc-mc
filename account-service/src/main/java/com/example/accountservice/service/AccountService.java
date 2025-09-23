@@ -8,7 +8,9 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -197,6 +199,8 @@ public class AccountService {
         searchDTO.setPositionIds(ValidateUtil.cleanPositionIds(searchDTO.getPositionIds()));
         searchDTO.setSearchFields(ValidateUtil.validateSearchFields(searchDTO.getSearchFields()));
 
+        Sort sort = pageable.getSort().and(Sort.by(Sort.Direction.DESC, "createdAt"));
+        pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
         Specification<Account> spec = AccountSpecification.build(searchDTO);
         return accountRepository.findAll(spec, pageable);
     }

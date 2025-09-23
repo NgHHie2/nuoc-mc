@@ -18,6 +18,4 @@ public class DocumentUpdateRequest {
     private String description;
 
     private List<String> tags;
-
-    private List<Long> catalogs;
 }

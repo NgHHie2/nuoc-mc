@@ -15,6 +15,7 @@ public class Tag {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    
 
     @NotBlank(message = "Tag name is required")
     private String name;
