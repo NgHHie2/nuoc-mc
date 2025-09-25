@@ -1,7 +1,10 @@
 package com.example.learnservice.model;
 
+import java.time.LocalDateTime;
+import org.hibernate.annotations.CreationTimestamp;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -12,17 +15,25 @@ import lombok.Data;
 
 @Entity
 @Data
-public class ClassroomDocument {
+public class SemesterDocument {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "semester_id")
+    private Semester semester;
 
     @ManyToOne
     @JoinColumn(name = "document_id")
     private Document document;
 
     @JsonIgnore
-    @ManyToOne
-    @JoinColumn(name = "classroom_id")
-    private Classroom classroom;
+    @Column(updatable = false)
+    private Long createdBy;
+
+    @JsonIgnore
+    @CreationTimestamp
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
 }

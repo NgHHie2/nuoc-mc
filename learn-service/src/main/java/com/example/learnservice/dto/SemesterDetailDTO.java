@@ -10,7 +10,7 @@ public class SemesterDetailDTO {
     private String name;
     private LocalDateTime startDate;
     private LocalDateTime endDate;
-    private Long totalClassrooms;
     private Long totalAccounts;
     private LocalDateTime createdAt;
+    private Long createdBy;
 }

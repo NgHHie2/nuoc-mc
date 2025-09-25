@@ -1,12 +1,29 @@
 package com.example.learnservice.controller;
 
+import java.io.ByteArrayInputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpRange;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,16 +35,19 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
-import com.example.learnservice.dto.DocumentSearchDTO;
+import com.example.learnservice.annotation.RequireRole;
+import com.example.learnservice.dto.SemesterAccountRequest;
 import com.example.learnservice.dto.SemesterCreateRequest;
 import com.example.learnservice.dto.SemesterUpdateRequest;
 import com.example.learnservice.enums.DocumentFormat;
+import com.example.learnservice.enums.Role;
 import com.example.learnservice.dto.SemesterDetailDTO;
+import com.example.learnservice.dto.SemesterDocumentRequest;
 import com.example.learnservice.dto.SemesterSearchDTO;
 import com.example.learnservice.model.Document;
 import com.example.learnservice.model.Semester;
+import com.example.learnservice.service.DocumentService;
 import com.example.learnservice.service.SemesterService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,6 +61,9 @@ public class SemesterController {
 
     @Autowired
     private SemesterService semesterService;
+
+    @Autowired
+    private DocumentService documentService;
 
     /**
      * Tìm kiếm semester theo từ khóa, theo năm với phân trang
@@ -121,4 +144,225 @@ public class SemesterController {
         return ResponseEntity.ok(response);
 
     }
+
+    /**
+     * Thêm documents vào semester
+     */
+    @PostMapping("/{semesterId}/documents")
+    public ResponseEntity<?> addDocumentsToSemester(
+            @PathVariable Long semesterId,
+            @Valid @RequestBody SemesterDocumentRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        semesterService.addDocumentsToSemester(semesterId, request, userId);
+
+        List<String> documents = semesterService.getDocumentsInSemester(semesterId);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Documents added successfully",
+                "semesterId", semesterId,
+                "documentCodes", documents,
+                "totalDocuments", documents.size()));
+    }
+
+    /**
+     * Lấy danh sách documents trong semester
+     */
+    @GetMapping("/{semesterId}/documents")
+    public ResponseEntity<?> getDocumentsInSemester(@PathVariable Long semesterId) {
+        List<String> documents = semesterService.getDocumentsInSemester(semesterId);
+
+        return ResponseEntity.ok(Map.of(
+                "semesterId", semesterId,
+                "documentCodes", documents,
+                "totalDocuments", documents.size()));
+    }
+
+    /**
+     * Xóa document khỏi semester
+     */
+    @DeleteMapping("/{semesterId}/documents/{documentCode}")
+    public ResponseEntity<?> removeDocumentFromSemester(
+            @PathVariable Long semesterId,
+            @PathVariable String documentCode,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        semesterService.removeDocumentFromSemester(semesterId, documentCode, userId);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Document removed successfully",
+                "semesterId", semesterId,
+                "documentCode", documentCode));
+    }
+
+    /**
+     * Thêm accounts vào semester
+     */
+    @PostMapping("/{semesterId}/accounts")
+    public ResponseEntity<?> addAccountsToSemester(
+            @PathVariable Long semesterId,
+            @Valid @RequestBody SemesterAccountRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        semesterService.addAccountsToSemester(semesterId, request, userId);
+
+        List<Map<String, Object>> accounts = semesterService.getAccountsInSemester(semesterId);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Accounts added successfully",
+                "semesterId", semesterId,
+                "totalAccounts", accounts.size()));
+    }
+
+    /**
+     * Lấy danh sách accounts trong semester
+     */
+    @GetMapping("/{semesterId}/accounts")
+    public ResponseEntity<?> getAccountsInSemester(@PathVariable Long semesterId) {
+        List<Map<String, Object>> accounts = semesterService.getAccountsInSemester(semesterId);
+
+        return ResponseEntity.ok(Map.of(
+                "semesterId", semesterId,
+                "accounts", accounts,
+                "totalAccounts", accounts.size()));
+    }
+
+    /**
+     * Xóa account khỏi semester
+     */
+    @DeleteMapping("/{semesterId}/accounts/{accountId}")
+    public ResponseEntity<?> removeAccountFromSemester(
+            @PathVariable Long semesterId,
+            @PathVariable Long accountId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        semesterService.removeAccountFromSemester(semesterId, accountId, userId);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Account removed successfully",
+                "semesterId", semesterId,
+                "accountId", accountId));
+    }
+
+    /**
+     * Cập nhật position của account trong semester
+     */
+    @PutMapping("/{semesterId}/accounts/{accountId}/position")
+    public ResponseEntity<?> updateAccountPosition(
+            @PathVariable Long semesterId,
+            @PathVariable Long accountId,
+            @RequestParam Long positionId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        semesterService.updateAccountPosition(semesterId, accountId, positionId, userId);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Account position updated successfully",
+                "semesterId", semesterId,
+                "accountId", accountId,
+                "newPositionId", positionId));
+    }
+
+    @GetMapping("/{semesterId}/download/{fileCode}")
+    public ResponseEntity<Resource> downloadFile(
+            @PathVariable Long semesterId,
+            @PathVariable String fileCode,
+            HttpServletRequest request) throws Exception {
+
+        String cccd = request.getHeader("X-CCCD");
+        String role = request.getHeader("X-User-Role");
+        Long accountId = Long.valueOf(request.getHeader("X-User-Id"));
+        if (role.equals(Role.STUDENT.toString())
+                && !semesterService.checkDocumentAccessThroughSemester(semesterId, accountId, fileCode)) {
+            return ResponseEntity.notFound().build();
+        }
+        Document document = documentService.getDocumentByCode(fileCode);
+
+        Path filePath = documentService.getDocumentPath(document);
+
+        // Thêm watermark dựa theo format
+        byte[] watermarkedContent = documentService.getFileContent(filePath, document, cccd);
+
+        String encodedFileName = URLEncoder.encode(document.getName(), StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+        String contentDisposition = "inline; filename*=UTF-8''" + encodedFileName;
+
+        // Tạo InputStreamResource
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(watermarkedContent);
+        InputStreamResource resource = new InputStreamResource(inputStream);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, Files.probeContentType(filePath))
+                .header("Content-Disposition", contentDisposition)
+                .body(resource);
+
+    }
+
+    @GetMapping("/{semesterId}/stream/{fileCode}")
+    public ResponseEntity<ResourceRegion> streamVideo(
+            @PathVariable Long semesterId,
+            @PathVariable String fileCode,
+            @RequestHeader HttpHeaders headers,
+            HttpServletRequest request) throws Exception {
+
+        String cccd = request.getHeader("X-CCCD");
+        String role = request.getHeader("X-User-Role");
+        Long accountId = Long.valueOf(request.getHeader("X-User-Id"));
+        if (role.equals(Role.STUDENT.toString())
+                && !semesterService.checkDocumentAccessThroughSemester(semesterId, accountId, fileCode)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Document document = documentService.getDocumentByCode(fileCode);
+        if (document == null || document.getFormat() != DocumentFormat.VIDEO) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path filePath = documentService.getDocumentPath(document);
+
+        if (!Files.exists(filePath)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Tạo cached watermarked file nếu chưa có
+        // String cacheKey = fileCode + "_" + cccd;
+        // File cachedFile = new File("D:/temp/cache_" + cacheKey + ".mp4");
+        // if (!cachedFile.exists()) {
+        // byte[] decryptedContent = fileUtil.decryptFile(filePath.toFile());
+        // byte[] watermarkedContent = fileUtil.addVideoWatermark(decryptedContent,
+        // cccd);
+        // // byte[] watermarkedContent = decryptedContent;
+        // Files.write(cachedFile.toPath(), watermarkedContent);
+        // log.info("Created and cached watermarked video for {}", documentCode);
+        // }
+
+        FileSystemResource videoResource = new FileSystemResource(filePath);
+        long contentLength = videoResource.contentLength();
+
+        // Xử lý Range header (nếu có)
+        ResourceRegion region;
+        if (headers.getRange() != null && !headers.getRange().isEmpty()) {
+            HttpRange range = headers.getRange().get(0);
+            long start = range.getRangeStart(contentLength);
+            long end = range.getRangeEnd(contentLength);
+            long rangeLength = Math.min(5 * 1024 * 1024, end - start + 1); // chunk ~1MB
+            region = new ResourceRegion(videoResource, start, rangeLength);
+        } else {
+            long rangeLength = Math.min(5 * 1024 * 1024, contentLength);
+            region = new ResourceRegion(videoResource, 0, rangeLength);
+        }
+
+        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT) // 206
+                .contentType(MediaTypeFactory.getMediaType(videoResource).orElse(MediaType.APPLICATION_OCTET_STREAM))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic())
+                .body(region);
+    }
+
 }

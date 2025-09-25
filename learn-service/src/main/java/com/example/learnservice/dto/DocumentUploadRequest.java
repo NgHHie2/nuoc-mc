@@ -12,14 +12,13 @@ import org.springframework.web.multipart.MultipartFile;
 public class DocumentUploadRequest {
     private MultipartFile file;
 
-    // @NotBlank(message = "Document number is required")
     @Size(max = 50, message = "Document number must not exceed 50 characters")
-    private String documentNumber; // Mã tài liệu do người dùng nhập
+    private String documentNumber;
 
     @Size(max = 1000, message = "Description must not exceed 1000 characters")
-    private String description; // Mô tả tài liệu
+    private String description;
 
-    private List<String> tags; // Danh sách tên tags
+    private List<String> tags;
 
-    private List<Long> catalogs; // Danh sách position IDs cho catalogs
+    private List<Long> positions; // Đổi từ catalogs thành positions
 }

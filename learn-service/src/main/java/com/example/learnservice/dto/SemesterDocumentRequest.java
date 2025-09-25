@@ -1,13 +1,13 @@
 package com.example.learnservice.dto;
 
+import java.util.List;
+
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
-import java.util.List;
-
 @Data
-public class ClassroomDocumentRequest {
+public class SemesterDocumentRequest {
     @NotNull(message = "Document codes are required")
     @NotEmpty(message = "Document codes cannot be empty")
     private List<String> documentCodes;

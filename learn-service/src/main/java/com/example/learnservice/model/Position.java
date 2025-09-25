@@ -15,41 +15,36 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Entity
 @Data
-public class Classroom {
+public class Position {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "Class name is required")
+    @NotBlank(message = "Position name is required")
     private String name;
 
-    private Integer limitQuantity = 20;
-
-    @OneToMany(mappedBy = "classroom", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<ClassroomAccount> classroomAccounts;
-
-    @OneToMany(mappedBy = "classroom", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<ClassroomDocument> classroomDocuments;
+    @JsonIgnore
+    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Catalog> catalogs;
 
     @JsonIgnore
-    @ManyToOne
-    @JoinColumn(name = "semester_id")
-    private Semester semester;
+    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<SemesterAccount> semesterAccounts;
 
+    @JsonIgnore
     @Column(updatable = false)
-    private Long createdBy; // ID của account tạo
+    private Long createdBy;
 
     @JsonIgnore
-    private Long updatedBy; // ID của account cập nhật
+    private Long updatedBy;
 
+    @JsonIgnore
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

@@ -8,7 +8,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -16,7 +15,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Entity
 @Data
 public class Document {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -30,16 +28,14 @@ public class Document {
     private String documentNumber;
 
     @Enumerated(EnumType.STRING)
-    private DocumentFormat format; // PDF hoặc VIDEO
+    private DocumentFormat format;
 
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    private Long size; // Kích thước (dung lượng) tính bằng bytes
-    private Integer pages; // Số trang (cho PDF)
-    private Integer minutes; // Số phút (cho video)
-    // private String filePath; // Đường dẫn vị trí lưu file
-    // private String previewPath; // Đường dẫn vị trí lưu ảnh preview
+    private Long size;
+    private Integer pages;
+    private Integer minutes;
 
     @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Catalog> catalogs;
@@ -49,14 +45,14 @@ public class Document {
 
     @JsonIgnore
     @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<ClassroomDocument> classroomDocuments;
+    private List<SemesterDocument> semesterDocuments;
 
     @JsonIgnore
     @Column(updatable = false)
-    private Long createdBy; // ID của account tạo
+    private Long createdBy;
 
     @JsonIgnore
-    private Long updatedBy; // ID của account cập nhật
+    private Long updatedBy;
 
     @CreationTimestamp
     @Column(updatable = false)

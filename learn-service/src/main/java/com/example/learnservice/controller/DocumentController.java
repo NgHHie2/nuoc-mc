@@ -6,6 +6,7 @@ import com.example.learnservice.dto.DocumentSearchDTO;
 import com.example.learnservice.dto.DocumentUpdateRequest;
 import com.example.learnservice.dto.DocumentUploadRequest;
 import com.example.learnservice.enums.DocumentFormat;
+import com.example.learnservice.enums.Role;
 import com.example.learnservice.model.Catalog;
 import com.example.learnservice.model.Document;
 import com.example.learnservice.model.Tag;
@@ -87,6 +88,7 @@ public class DocumentController {
         }
     }
 
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     @GetMapping("/download/{fileCode}")
     public ResponseEntity<Resource> downloadFile(
             @PathVariable String fileCode,
@@ -94,16 +96,8 @@ public class DocumentController {
 
         log.info("X-CCCD: " + request.getHeader("X-CCCD"));
         String cccd = request.getHeader("X-CCCD");
-        Long accountId = Long.valueOf(request.getHeader("X-User-Id"));
-        List<Long> positions = Arrays.stream(request.getHeader("X-Positions").split(","))
-                .filter(s -> !s.isBlank())
-                .map(Long::parseLong)
-                .toList();
-
         Document document = documentService.getDocumentByCode(fileCode);
-        if (!documentService.checkDocumentAccess(document, positions, accountId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Permission denied");
-        }
+
         Path filePath = documentService.getDocumentPath(document);
 
         // Thêm watermark dựa theo format
@@ -129,6 +123,7 @@ public class DocumentController {
      * Stream video với hỗ trợ HTTP Range requests
      * 
      */
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     @GetMapping("/stream/{fileCode}")
     public ResponseEntity<ResourceRegion> streamVideo(
             @PathVariable String fileCode,
@@ -136,19 +131,10 @@ public class DocumentController {
             HttpServletRequest request) throws Exception {
 
         String cccd = request.getHeader("X-CCCD");
-        Long accountId = Long.valueOf(request.getHeader("X-User-Id"));
-        List<Long> positions = Arrays.stream(request.getHeader("X-Positions").split(","))
-                .filter(s -> !s.isBlank())
-                .map(Long::parseLong)
-                .toList();
 
         Document document = documentService.getDocumentByCode(fileCode);
         if (document == null || document.getFormat() != DocumentFormat.VIDEO) {
             return ResponseEntity.notFound().build();
-        }
-
-        if (!documentService.checkDocumentAccess(document, positions, accountId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Permission denied");
         }
 
         Path filePath = documentService.getDocumentPath(document);
@@ -227,17 +213,18 @@ public class DocumentController {
     public Page<Document> searchDocuments(
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "format", required = false) DocumentFormat format,
-            @RequestParam(value = "catalogIds", required = false) List<Long> catalogIds,
+            @RequestParam(value = "positionIds", required = false) List<Long> positionIds,
             @RequestParam(value = "searchFields", required = false) List<String> searchFields,
             Pageable pageable) {
 
         DocumentSearchDTO searchDTO = new DocumentSearchDTO();
-        searchDTO.setKeyword(keyword);
+        searchDTO.setKeyword(keyword == null ? null : keyword.trim());
         searchDTO.setFormat(format);
-        searchDTO.setCatalogIds(catalogIds);
+        searchDTO.setPositionIds(positionIds);
         searchDTO.setSearchFields(searchFields);
-
-        return documentService.universalSearch(searchDTO, pageable);
+        Page<Document> documents = documentService.universalSearch(searchDTO, pageable);
+        System.out.println(documents);
+        return documents;
     }
 
     @GetMapping("/{code}")

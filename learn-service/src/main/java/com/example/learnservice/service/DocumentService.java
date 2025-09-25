@@ -34,10 +34,11 @@ import com.example.learnservice.dto.DocumentUploadRequest;
 import com.example.learnservice.enums.DocumentFormat;
 import com.example.learnservice.model.Catalog;
 import com.example.learnservice.model.Document;
+import com.example.learnservice.model.Position;
 import com.example.learnservice.model.Tag;
 import com.example.learnservice.repository.CatalogRepository;
-import com.example.learnservice.repository.ClassroomRepository;
 import com.example.learnservice.repository.DocumentRepository;
+import com.example.learnservice.repository.PositionRepository;
 import com.example.learnservice.repository.TagRepository;
 import com.example.learnservice.specification.DocumentSpecification;
 import com.example.learnservice.util.FileUtil;
@@ -54,7 +55,7 @@ public class DocumentService {
     private TagRepository tagRepository;
 
     @Autowired
-    private ClassroomRepository classroomRepository;
+    private PositionRepository positionRepository;
 
     @Autowired
     private FileUtil fileUtil;
@@ -113,16 +114,19 @@ public class DocumentService {
         }
 
         // Tạo Catalogs
-        if (request.getCatalogs() != null && !request.getCatalogs().isEmpty()) {
+        if (request.getPositions() != null && !request.getPositions().isEmpty()) {
             List<Catalog> catalogs = new ArrayList<>();
-            for (Long positionId : request.getCatalogs()) {
+            for (Long positionId : request.getPositions()) {
                 if (positionId != null) {
-                    Catalog catalog = new Catalog();
-                    catalog.setPositionId(positionId);
-                    catalog.setDocument(savedDocument);
-                    catalog.setCreatedBy(userId);
-                    catalog.setUpdatedBy(userId);
-                    catalogs.add(catalog);
+                    Position position = positionRepository.findById(positionId).orElse(null);
+                    if (position != null) {
+                        Catalog catalog = new Catalog();
+                        catalog.setPosition(position);
+                        catalog.setDocument(savedDocument);
+                        catalog.setCreatedBy(userId);
+                        catalog.setUpdatedBy(userId);
+                        catalogs.add(catalog);
+                    }
                 }
             }
             savedDocument.setCatalogs(catalogs);
@@ -160,18 +164,6 @@ public class DocumentService {
         }
 
         return filePath;
-    }
-
-    public boolean checkDocumentAccess(Document document, List<Long> positions, Long accountId) {
-        List<Long> required = document.getCatalogs().stream().map(Catalog::getPositionId).toList();
-        if (document.getCreatedBy() == accountId)
-            return true;
-        if (!Collections.disjoint(positions, required))
-            return true;
-        if (classroomRepository.existsByAccountIdAndDocumentCode(accountId, document.getCode()))
-            return true;
-
-        return false;
     }
 
     public byte[] getFileContent(Path filePath, Document document, String cccd) throws Exception {

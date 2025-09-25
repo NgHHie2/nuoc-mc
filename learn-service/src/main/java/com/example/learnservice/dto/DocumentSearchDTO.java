@@ -9,6 +9,6 @@ import java.util.List;
 public class DocumentSearchDTO {
     private String keyword;
     private DocumentFormat format;
-    private List<Long> catalogIds; // Tương tự positionIds bên account
+    private List<Long> positionIds; // Đổi từ catalogIds thành positionIds
     private List<String> searchFields;
 }

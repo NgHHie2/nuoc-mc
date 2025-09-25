@@ -33,14 +33,17 @@ public class Semester {
     private LocalDateTime endDate;
 
     @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Classroom> classrooms;
+    private List<SemesterDocument> semesterDocuments;
+
+    @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<SemesterAccount> semesterAccounts;
 
     @JsonIgnore
     @Column(updatable = false)
-    private Long createdBy; // ID của account tạo
+    private Long createdBy;
 
     @JsonIgnore
-    private Long updatedBy; // ID của account cập nhật
+    private Long updatedBy;
 
     @CreationTimestamp
     @Column(updatable = false)

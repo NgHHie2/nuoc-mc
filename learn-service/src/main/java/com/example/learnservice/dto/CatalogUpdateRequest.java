@@ -6,5 +6,5 @@ import lombok.Data;
 
 @Data
 public class CatalogUpdateRequest {
-    private List<Long> catalogs;
+    private List<Long> positions;
 }

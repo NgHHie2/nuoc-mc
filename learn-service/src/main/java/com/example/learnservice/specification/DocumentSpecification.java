@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import com.example.learnservice.dto.DocumentSearchDTO;
 import com.example.learnservice.enums.DocumentFormat;
 import com.example.learnservice.model.Document;
+import com.example.learnservice.model.Position;
 import com.example.learnservice.model.Catalog;
 import com.example.learnservice.model.Tag;
 
@@ -24,13 +25,14 @@ public class DocumentSpecification {
         return (root, query, cb) -> format == null ? cb.conjunction() : cb.equal(root.get("format"), format);
     }
 
-    public static Specification<Document> hasCatalogs(List<Long> catalogIds) {
+    public static Specification<Document> hasPositions(List<Long> positionIds) {
         return (root, query, cb) -> {
-            if (catalogIds == null || catalogIds.isEmpty()) {
+            if (positionIds == null || positionIds.isEmpty()) {
                 return cb.conjunction();
             }
             Join<Document, Catalog> catalogJoin = root.join("catalogs", JoinType.LEFT);
-            return catalogJoin.get("positionId").in(catalogIds);
+            Join<Catalog, Position> positionJoin = catalogJoin.join("position", JoinType.LEFT);
+            return positionJoin.get("id").in(positionIds);
         };
     }
 
@@ -70,7 +72,7 @@ public class DocumentSpecification {
 
     public static Specification<Document> build(DocumentSearchDTO searchDTO) {
         return Specification.where(hasFormat(searchDTO.getFormat()))
-                .and(hasCatalogs(searchDTO.getCatalogIds()))
+                .and(hasPositions(searchDTO.getPositionIds()))
                 .and(keywordInFields(searchDTO.getKeyword(), searchDTO.getSearchFields()));
     }
 }
