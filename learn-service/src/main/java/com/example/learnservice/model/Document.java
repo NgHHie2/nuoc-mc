@@ -25,6 +25,7 @@ public class Document {
     @Column(unique = true)
     private String code;
 
+    @Column(unique = true)
     private String documentNumber;
 
     @Enumerated(EnumType.STRING)

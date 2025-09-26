@@ -1,10 +1,14 @@
 package com.example.accountservice.controller;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -206,6 +210,46 @@ public class AccountController {
         }
         Long accountId = Long.valueOf(userIdString);
         return accountService.updatePasswordByUser(accountId, passwordChangeDTO);
+    }
+
+    /**
+     * Lấy thông tin nhiều tài khoản theo danh sách ID
+     * Chức năng: Truy xuất name của nhiều tài khoản cùng lúc
+     * 
+     * Input:
+     * - ids (query parameter): Danh sách ID các tài khoản cần lấy thông tin (e.g.,
+     * ?ids=1&ids=2&ids=3)
+     * 
+     * Output:
+     * - List<Account>: Danh sách thông tin tài khoản
+     */
+    @GetMapping("/bulk")
+    @RequireRole({ Role.ADMIN, Role.TEACHER, Role.STUDENT })
+    public List<Account> getAccountsByIds(@RequestParam("ids") List<Long> ids) {
+        log.info("Get accounts by ids: " + ids);
+
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Remove duplicates and null values
+        List<Long> uniqueIds = ids.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        return accountService.getAccountsByIds(uniqueIds);
+    }
+
+    /*
+     * Lấy thông tin tài khoản theo số cccd
+     */
+    @GetMapping("/cccd/{cccd}")
+    @RequireRole({ Role.ADMIN, Role.TEACHER })
+    public ResponseEntity<Account> getAccountByCccd(@PathVariable String cccd) {
+        return accountService.findByCccd(cccd)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
 }

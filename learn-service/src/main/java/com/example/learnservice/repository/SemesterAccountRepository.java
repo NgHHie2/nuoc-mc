@@ -1,6 +1,7 @@
 package com.example.learnservice.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,4 +23,9 @@ public interface SemesterAccountRepository extends JpaRepository<SemesterAccount
                         @Param("semesterId") Long semesterId,
                         @Param("accountId") Long accountId,
                         @Param("documentCode") String documentCode);
+
+        @Modifying
+        @Query("DELETE FROM SemesterAccount sa WHERE sa.semester.id = :semesterId AND sa.accountId = :accountId")
+        int deleteBySemesterIdAndAccountId(@Param("semesterId") Long semesterId,
+                        @Param("accountId") Long accountId);
 }

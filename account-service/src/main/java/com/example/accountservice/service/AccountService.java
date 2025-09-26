@@ -1,5 +1,6 @@
 package com.example.accountservice.service;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -27,6 +28,7 @@ import com.example.accountservice.util.listener.event.UserRegisteredEvent;
 import com.example.accountservice.util.listener.event.UserUpdatedEvent;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
@@ -203,6 +205,26 @@ public class AccountService {
         pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
         Specification<Account> spec = AccountSpecification.build(searchDTO);
         return accountRepository.findAll(spec, pageable);
+    }
+
+    /**
+     * Lấy danh sách tài khoản theo nhiều ID
+     * 
+     * @param ids Danh sách ID cần lấy
+     * @return Danh sách tài khoản
+     */
+    public List<Account> getAccountsByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Sử dụng findAllById của JpaRepository và filter theo visible = 1
+        return accountRepository.findAll(
+                (root, query, criteriaBuilder) -> {
+                    Predicate idPredicate = root.get("id").in(ids);
+                    Predicate visiblePredicate = criteriaBuilder.equal(root.get("visible"), 1);
+                    return criteriaBuilder.and(idPredicate, visiblePredicate);
+                });
     }
 
 }

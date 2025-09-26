@@ -143,6 +143,13 @@ public class DocumentService {
         return documentOpt.get();
     }
 
+    public Document getDocumentByDocumentNumber(String documentNumber) {
+        Optional<Document> documentOpt = documentRepository.findByDocumentNumber(documentNumber);
+        if (documentOpt.isEmpty())
+            return null;
+        return documentOpt.get();
+    }
+
     public Path getDocumentPath(Document document) {
         String fileName = document.getCode() + "." + FilenameUtils.getExtension(document.getName());
         // Sanitize filename

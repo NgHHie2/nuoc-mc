@@ -233,6 +233,15 @@ public class DocumentController {
         return documentService.getDocumentByCode(code);
     }
 
+    @GetMapping("/number/{documentNumber}")
+    public ResponseEntity<Document> getDocumentByDocumentNumber(@PathVariable String documentNumber) {
+        log.info("get document by number: " + documentNumber);
+        Document document = documentService.getDocumentByDocumentNumber(documentNumber);
+        if (document == null)
+            return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(document);
+    }
+
     /**
      * Cập nhật thông tin tài liệu
      */

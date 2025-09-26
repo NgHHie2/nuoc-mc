@@ -50,6 +50,7 @@ import com.example.learnservice.model.Semester;
 import com.example.learnservice.service.DocumentService;
 import com.example.learnservice.service.SemesterService;
 
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +65,16 @@ public class SemesterController {
 
     @Autowired
     private DocumentService documentService;
+
+    /**
+     * Lấy thông tin chi tiết của một semester
+     */
+    @GetMapping("/{semesterId}")
+    public ResponseEntity<Semester> getSemesterById(@PathVariable Long semesterId) {
+        Semester semester = semesterService.getSemesterById(semesterId);
+        return ResponseEntity.ok(semester);
+
+    }
 
     /**
      * Tìm kiếm semester theo từ khóa, theo năm với phân trang
@@ -95,7 +106,8 @@ public class SemesterController {
         return semesterService.universalSearch(searchDTO, pageable);
     }
 
-    @PostMapping("/")
+    @PostMapping
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     public ResponseEntity<?> createSemester(@Valid @RequestBody SemesterCreateRequest semesterCreateRequest,
             @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
         Long userId = Long.valueOf(userIdStr);
@@ -111,6 +123,7 @@ public class SemesterController {
     }
 
     @PutMapping("/{semesterId}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     public ResponseEntity<?> updateSemester(
             @PathVariable Long semesterId,
             @Valid @RequestBody SemesterUpdateRequest updateRequest,
@@ -130,6 +143,7 @@ public class SemesterController {
     }
 
     @DeleteMapping("/{semesterId}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     public ResponseEntity<?> deleteSemester(
             @PathVariable Long semesterId,
             @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
@@ -149,6 +163,7 @@ public class SemesterController {
      * Thêm documents vào semester
      */
     @PostMapping("/{semesterId}/documents")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     public ResponseEntity<?> addDocumentsToSemester(
             @PathVariable Long semesterId,
             @Valid @RequestBody SemesterDocumentRequest request,
@@ -170,6 +185,7 @@ public class SemesterController {
      * Lấy danh sách documents trong semester
      */
     @GetMapping("/{semesterId}/documents")
+    @RequireRole({ Role.TEACHER, Role.ADMIN, Role.STUDENT })
     public ResponseEntity<?> getDocumentsInSemester(@PathVariable Long semesterId) {
         List<String> documents = semesterService.getDocumentsInSemester(semesterId);
 
@@ -183,6 +199,7 @@ public class SemesterController {
      * Xóa document khỏi semester
      */
     @DeleteMapping("/{semesterId}/documents/{documentCode}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     public ResponseEntity<?> removeDocumentFromSemester(
             @PathVariable Long semesterId,
             @PathVariable String documentCode,
@@ -201,6 +218,7 @@ public class SemesterController {
      * Thêm accounts vào semester
      */
     @PostMapping("/{semesterId}/accounts")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     public ResponseEntity<?> addAccountsToSemester(
             @PathVariable Long semesterId,
             @Valid @RequestBody SemesterAccountRequest request,
@@ -221,6 +239,7 @@ public class SemesterController {
      * Lấy danh sách accounts trong semester
      */
     @GetMapping("/{semesterId}/accounts")
+    @RequireRole({ Role.TEACHER, Role.ADMIN, Role.STUDENT })
     public ResponseEntity<?> getAccountsInSemester(@PathVariable Long semesterId) {
         List<Map<String, Object>> accounts = semesterService.getAccountsInSemester(semesterId);
 
@@ -234,6 +253,7 @@ public class SemesterController {
      * Xóa account khỏi semester
      */
     @DeleteMapping("/{semesterId}/accounts/{accountId}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     public ResponseEntity<?> removeAccountFromSemester(
             @PathVariable Long semesterId,
             @PathVariable Long accountId,
@@ -252,6 +272,7 @@ public class SemesterController {
      * Cập nhật position của account trong semester
      */
     @PutMapping("/{semesterId}/accounts/{accountId}/position")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     public ResponseEntity<?> updateAccountPosition(
             @PathVariable Long semesterId,
             @PathVariable Long accountId,
@@ -269,6 +290,7 @@ public class SemesterController {
     }
 
     @GetMapping("/{semesterId}/download/{fileCode}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN, Role.STUDENT })
     public ResponseEntity<Resource> downloadFile(
             @PathVariable Long semesterId,
             @PathVariable String fileCode,
@@ -305,6 +327,7 @@ public class SemesterController {
     }
 
     @GetMapping("/{semesterId}/stream/{fileCode}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN, Role.STUDENT })
     public ResponseEntity<ResourceRegion> streamVideo(
             @PathVariable Long semesterId,
             @PathVariable String fileCode,

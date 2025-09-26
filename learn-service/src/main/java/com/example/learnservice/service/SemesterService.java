@@ -245,13 +245,13 @@ public class SemesterService {
 
         // Get current account-position pairs
         Set<String> currentPairs = semester.getSemesterAccounts().stream()
-                .map(sa -> sa.getAccountId() + "_" + sa.getPosition().getId())
+                .map(sa -> sa.getAccountId().toString())
                 .collect(Collectors.toSet());
 
         // Filter new assignments
         List<SemesterAccountRequest.AccountPositionAssignment> newAssignments = request.getAccountAssignments().stream()
                 .filter(assignment -> !currentPairs.contains(
-                        assignment.getAccountId() + "_" + assignment.getPositionId()))
+                        assignment.getAccountId().toString()))
                 .collect(Collectors.toList());
 
         if (newAssignments.isEmpty())
@@ -285,17 +285,12 @@ public class SemesterService {
      */
     @Transactional
     public void removeAccountFromSemester(Long semesterId, Long accountId, Long userId) {
-        Semester semester = getSemesterById(semesterId);
+        int deletedCount = semesterAccountRepository.deleteBySemesterIdAndAccountId(semesterId, accountId);
 
-        List<SemesterAccount> toRemove = semester.getSemesterAccounts().stream()
-                .filter(sa -> sa.getAccountId().equals(accountId))
-                .collect(Collectors.toList());
-
-        if (toRemove.isEmpty()) {
+        if (deletedCount == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found in semester");
         }
 
-        semesterAccountRepository.deleteAll(toRemove);
         log.info("Removed account {} from semester {}", accountId, semesterId);
     }
 

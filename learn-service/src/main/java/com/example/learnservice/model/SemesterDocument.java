@@ -20,6 +20,7 @@ public class SemesterDocument {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore
     @ManyToOne
     @JoinColumn(name = "semester_id")
     private Semester semester;

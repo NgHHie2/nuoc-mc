@@ -13,4 +13,6 @@ public interface DocumentRepository extends JpaRepository<Document, Long>, JpaSp
     Optional<Document> findByCode(String code);
 
     List<Document> findAllByCodeIn(List<String> codes);
+
+    Optional<Document> findByDocumentNumber(String documentNumber);
 }
