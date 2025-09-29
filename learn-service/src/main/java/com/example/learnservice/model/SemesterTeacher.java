@@ -26,6 +26,7 @@ public class SemesterTeacher {
     private Semester semester;
 
     private Long teacherId;
+    private String teacherName;
 
     @JsonIgnore
     @Column(updatable = false)
