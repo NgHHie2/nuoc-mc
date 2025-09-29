@@ -1,6 +1,7 @@
 package com.example.learnservice.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,4 +19,6 @@ public class SemesterUpdateRequest {
 
     @NotNull
     private LocalDateTime endDate;
+
+    private List<Long> teacherIds;
 }
