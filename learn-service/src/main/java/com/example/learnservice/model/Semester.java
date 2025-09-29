@@ -31,6 +31,7 @@ public class Semester {
 
     private LocalDateTime startDate;
     private LocalDateTime endDate;
+    private List<Long> teacherIds;
 
     @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<SemesterDocument> semesterDocuments;
