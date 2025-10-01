@@ -69,5 +69,12 @@ public class UserEventListener {
         } catch (Exception e) {
             log.error("Redis failed: {}", e.getMessage());
         }
+
+        try {
+            kafkaProducer.sendAccount("account-updated", event.getAccount());
+            log.info("Kafka sent for: {}", event.getAccount().getUsername());
+        } catch (Exception e) {
+            log.error("Kafka failed: {}", e.getMessage());
+        }
     }
 }

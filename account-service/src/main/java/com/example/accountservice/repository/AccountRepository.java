@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
+import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 
 @Repository
@@ -24,5 +25,7 @@ public interface AccountRepository extends JpaRepository<Account, Long>, JpaSpec
     Optional<Account> findByCccdAndVisible(String cccd, int visible);
 
     Optional<Account> findByEmailAndVisible(String email, int visible);
+
+    Optional<Account> findByCccdAndVisibleAndRole(String cccd, int visible, Role role);
 
 }

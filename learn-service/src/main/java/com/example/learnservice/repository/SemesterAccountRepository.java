@@ -28,4 +28,7 @@ public interface SemesterAccountRepository extends JpaRepository<SemesterAccount
         @Query("DELETE FROM SemesterAccount sa WHERE sa.semester.id = :semesterId AND sa.accountId = :accountId")
         int deleteBySemesterIdAndAccountId(@Param("semesterId") Long semesterId,
                         @Param("accountId") Long accountId);
+
+        int deleteByAccountId(Long accountId);
+
 }

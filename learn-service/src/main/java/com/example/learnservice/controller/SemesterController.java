@@ -5,6 +5,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.example.learnservice.annotation.RequireRole;
 import com.example.learnservice.dto.SemesterAccountRequest;
@@ -44,7 +46,9 @@ import com.example.learnservice.enums.DocumentFormat;
 import com.example.learnservice.enums.Role;
 import com.example.learnservice.dto.SemesterDetailDTO;
 import com.example.learnservice.dto.SemesterDocumentRequest;
+import com.example.learnservice.dto.SemesterResponse;
 import com.example.learnservice.dto.SemesterSearchDTO;
+import com.example.learnservice.dto.SemesterTeacherRequest;
 import com.example.learnservice.model.Document;
 import com.example.learnservice.model.Semester;
 import com.example.learnservice.service.DocumentService;
@@ -95,6 +99,8 @@ public class SemesterController {
             @RequestParam(value = "startYear", required = false) Integer startYear,
             @RequestParam(value = "endYear", required = false) Integer endYear,
             @RequestParam(value = "searchFields", required = false) List<String> searchFields,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr,
             Pageable pageable) {
 
         SemesterSearchDTO searchDTO = new SemesterSearchDTO();
@@ -103,59 +109,70 @@ public class SemesterController {
         searchDTO.setEndYear(endYear);
         searchDTO.setSearchFields(searchFields);
 
-        return semesterService.universalSearch(searchDTO, pageable);
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+
+        return semesterService.universalSearch(searchDTO, pageable, userId, userRole);
     }
 
     @PostMapping
-    @RequireRole({ Role.TEACHER, Role.ADMIN })
-    public ResponseEntity<?> createSemester(@Valid @RequestBody SemesterCreateRequest semesterCreateRequest,
+    @RequireRole({ Role.ADMIN })
+    public SemesterResponse createSemester(
+            @Valid @RequestBody SemesterCreateRequest semesterCreateRequest,
             @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+
         Long userId = Long.valueOf(userIdStr);
         Semester semester = semesterService.saveSemester(semesterCreateRequest, userId);
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("id", semester.getId());
-        response.put("semesterName", semester.getName());
-        response.put("startDate", semester.getStartDate());
-        response.put("endDate", semester.getEndDate());
-        response.put("createdAt", semester.getCreatedAt());
-        return ResponseEntity.ok(response);
+        SemesterResponse response = SemesterResponse.builder()
+                .id(semester.getId())
+                .semesterName(semester.getName())
+                .startDate(semester.getStartDate())
+                .endDate(semester.getEndDate())
+                .createdAt(semester.getCreatedAt())
+                .build();
+
+        return response;
     }
 
     @PutMapping("/{semesterId}")
     @RequireRole({ Role.TEACHER, Role.ADMIN })
-    public ResponseEntity<?> updateSemester(
+    public SemesterResponse updateSemester(
             @PathVariable Long semesterId,
             @Valid @RequestBody SemesterUpdateRequest updateRequest,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+
         Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
         Semester updatedSemester = semesterService.updateSemester(semesterId, updateRequest, userId);
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("id", updatedSemester.getId());
-        response.put("semesterName", updatedSemester.getName());
-        response.put("startDate", updatedSemester.getStartDate());
-        response.put("endDate", updatedSemester.getEndDate());
-        response.put("updatedAt", updatedSemester.getUpdatedAt());
+        SemesterResponse response = SemesterResponse.builder()
+                .id(updatedSemester.getId())
+                .semesterName(updatedSemester.getName())
+                .startDate(updatedSemester.getStartDate())
+                .endDate(updatedSemester.getEndDate())
+                .updatedAt(updatedSemester.getUpdatedAt())
+                .build();
 
-        return ResponseEntity.ok(response);
-
+        return response;
     }
 
     @DeleteMapping("/{semesterId}")
-    @RequireRole({ Role.TEACHER, Role.ADMIN })
-    public ResponseEntity<?> deleteSemester(
+    @RequireRole({ Role.ADMIN })
+    public String deleteSemester(
             @PathVariable Long semesterId,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
         Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
         semesterService.deleteSemester(semesterId, userId);
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("message", "Semester deleted successfully");
-        response.put("semesterId", semesterId);
-        response.put("deletedAt", java.time.LocalDateTime.now());
-
-        return ResponseEntity.ok(response);
+        return "Delete semester " + semesterId + " successful!";
 
     }
 
@@ -164,35 +181,19 @@ public class SemesterController {
      */
     @PostMapping("/{semesterId}/documents")
     @RequireRole({ Role.TEACHER, Role.ADMIN })
-    public ResponseEntity<?> addDocumentsToSemester(
+    public String addDocumentsToSemester(
             @PathVariable Long semesterId,
             @Valid @RequestBody SemesterDocumentRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
 
         Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
         semesterService.addDocumentsToSemester(semesterId, request, userId);
 
-        List<String> documents = semesterService.getDocumentsInSemester(semesterId);
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Documents added successfully",
-                "semesterId", semesterId,
-                "documentCodes", documents,
-                "totalDocuments", documents.size()));
-    }
-
-    /**
-     * Lấy danh sách documents trong semester
-     */
-    @GetMapping("/{semesterId}/documents")
-    @RequireRole({ Role.TEACHER, Role.ADMIN, Role.STUDENT })
-    public ResponseEntity<?> getDocumentsInSemester(@PathVariable Long semesterId) {
-        List<String> documents = semesterService.getDocumentsInSemester(semesterId);
-
-        return ResponseEntity.ok(Map.of(
-                "semesterId", semesterId,
-                "documentCodes", documents,
-                "totalDocuments", documents.size()));
+        return "Documents added successfully";
     }
 
     /**
@@ -200,18 +201,19 @@ public class SemesterController {
      */
     @DeleteMapping("/{semesterId}/documents/{documentCode}")
     @RequireRole({ Role.TEACHER, Role.ADMIN })
-    public ResponseEntity<?> removeDocumentFromSemester(
+    public String removeDocumentFromSemester(
             @PathVariable Long semesterId,
             @PathVariable String documentCode,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
 
         Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
         semesterService.removeDocumentFromSemester(semesterId, documentCode, userId);
 
-        return ResponseEntity.ok(Map.of(
-                "message", "Document removed successfully",
-                "semesterId", semesterId,
-                "documentCode", documentCode));
+        return "Document removed successfully";
     }
 
     /**
@@ -219,34 +221,19 @@ public class SemesterController {
      */
     @PostMapping("/{semesterId}/accounts")
     @RequireRole({ Role.TEACHER, Role.ADMIN })
-    public ResponseEntity<?> addAccountsToSemester(
+    public String addAccountsToSemester(
             @PathVariable Long semesterId,
             @Valid @RequestBody SemesterAccountRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
 
         Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
         semesterService.addAccountsToSemester(semesterId, request, userId);
 
-        List<Map<String, Object>> accounts = semesterService.getAccountsInSemester(semesterId);
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Accounts added successfully",
-                "semesterId", semesterId,
-                "totalAccounts", accounts.size()));
-    }
-
-    /**
-     * Lấy danh sách accounts trong semester
-     */
-    @GetMapping("/{semesterId}/accounts")
-    @RequireRole({ Role.TEACHER, Role.ADMIN, Role.STUDENT })
-    public ResponseEntity<?> getAccountsInSemester(@PathVariable Long semesterId) {
-        List<Map<String, Object>> accounts = semesterService.getAccountsInSemester(semesterId);
-
-        return ResponseEntity.ok(Map.of(
-                "semesterId", semesterId,
-                "accounts", accounts,
-                "totalAccounts", accounts.size()));
+        return "Accounts added successfully";
     }
 
     /**
@@ -254,18 +241,19 @@ public class SemesterController {
      */
     @DeleteMapping("/{semesterId}/accounts/{accountId}")
     @RequireRole({ Role.TEACHER, Role.ADMIN })
-    public ResponseEntity<?> removeAccountFromSemester(
+    public String removeAccountFromSemester(
             @PathVariable Long semesterId,
             @PathVariable Long accountId,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
 
         Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
         semesterService.removeAccountFromSemester(semesterId, accountId, userId);
 
-        return ResponseEntity.ok(Map.of(
-                "message", "Account removed successfully",
-                "semesterId", semesterId,
-                "accountId", accountId));
+        return "Account removed successfully";
     }
 
     /**
@@ -273,20 +261,58 @@ public class SemesterController {
      */
     @PutMapping("/{semesterId}/accounts/{accountId}/position")
     @RequireRole({ Role.TEACHER, Role.ADMIN })
-    public ResponseEntity<?> updateAccountPosition(
+    public String updateAccountPosition(
             @PathVariable Long semesterId,
             @PathVariable Long accountId,
             @RequestParam Long positionId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
+        semesterService.updateAccountPosition(semesterId, accountId, positionId, userId);
+
+        return "Account position updated successfully";
+    }
+
+    /**
+     * Thêm teachers vào semester
+     */
+    @PostMapping("/{semesterId}/teachers")
+    @RequireRole({ Role.ADMIN })
+    public String addTeachersToSemester(
+            @PathVariable Long semesterId,
+            @Valid @RequestBody SemesterTeacherRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        // Role userRole = Role.valueOf(userRoleStr);
+        // if (userRole.equals(Role.TEACHER) &&
+        // !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+        // throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a
+        // teacher in this course!");
+        semesterService.addTeachersToSemester(semesterId, request, userId);
+
+        return "Accounts added successfully";
+    }
+
+    /*
+     * Xóa teacher khỏi semester
+     */
+    @DeleteMapping("/{semesterId}/teachers/{teacherId}")
+    @RequireRole({ Role.ADMIN })
+    public String removeTeacherFromSemester(
+            @PathVariable Long semesterId,
+            @PathVariable Long teacherId,
             @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
 
         Long userId = Long.valueOf(userIdStr);
-        semesterService.updateAccountPosition(semesterId, accountId, positionId, userId);
+        semesterService.removeTeacherFromSemester(semesterId, teacherId, userId);
 
-        return ResponseEntity.ok(Map.of(
-                "message", "Account position updated successfully",
-                "semesterId", semesterId,
-                "accountId", accountId,
-                "newPositionId", positionId));
+        return "Teacher removed successfully";
     }
 
     @GetMapping("/{semesterId}/download/{fileCode}")

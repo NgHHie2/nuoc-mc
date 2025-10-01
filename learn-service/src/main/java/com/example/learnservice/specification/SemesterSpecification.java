@@ -9,7 +9,10 @@ import org.springframework.util.StringUtils;
 
 import com.example.learnservice.dto.SemesterSearchDTO;
 import com.example.learnservice.model.Semester;
+import com.example.learnservice.model.SemesterAccount;
+import com.example.learnservice.model.SemesterTeacher;
 
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 
 public class SemesterSpecification {
@@ -67,6 +70,26 @@ public class SemesterSpecification {
             }
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Specification để filter semester có student cụ thể
+     */
+    public static Specification<Semester> hasStudent(Long studentId) {
+        return (root, query, cb) -> {
+            Join<Semester, SemesterAccount> accountJoin = root.join("semesterAccounts");
+            return cb.equal(accountJoin.get("accountId"), studentId);
+        };
+    }
+
+    /**
+     * Specification để filter semester có teacher cụ thể
+     */
+    public static Specification<Semester> hasTeacher(Long teacherId) {
+        return (root, query, cb) -> {
+            Join<Semester, SemesterTeacher> teacherJoin = root.join("semesterTeachers");
+            return cb.equal(teacherJoin.get("teacherId"), teacherId);
         };
     }
 }

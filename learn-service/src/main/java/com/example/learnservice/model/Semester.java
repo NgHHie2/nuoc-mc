@@ -31,13 +31,15 @@ public class Semester {
 
     private LocalDateTime startDate;
     private LocalDateTime endDate;
-    private List<Long> teacherIds;
 
-    @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<SemesterDocument> semesterDocuments;
 
-    @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<SemesterAccount> semesterAccounts;
+
+    @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private List<SemesterTeacher> semesterTeachers;
 
     @JsonIgnore
     @Column(updatable = false)

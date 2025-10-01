@@ -244,10 +244,21 @@ public class AccountController {
     /*
      * Lấy thông tin tài khoản theo số cccd
      */
-    @GetMapping("/cccd/{cccd}")
+    @GetMapping("/student/{cccd}")
     @RequireRole({ Role.ADMIN, Role.TEACHER })
     public ResponseEntity<Account> getAccountByCccd(@PathVariable String cccd) {
-        return accountService.findByCccd(cccd)
+        return accountService.findStudentByCccd(cccd)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /*
+     * Lấy thông tin tài khoản theo số cccd
+     */
+    @GetMapping("/teacher/{cccd}")
+    @RequireRole({ Role.ADMIN, Role.TEACHER })
+    public ResponseEntity<Account> getTeacherByCccd(@PathVariable String cccd) {
+        return accountService.findTeacherByCccd(cccd)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

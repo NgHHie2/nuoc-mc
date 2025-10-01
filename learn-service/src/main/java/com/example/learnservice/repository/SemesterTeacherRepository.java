@@ -7,5 +7,7 @@ import com.example.learnservice.model.SemesterTeacher;
 
 @Repository
 public interface SemesterTeacherRepository extends JpaRepository<SemesterTeacher, Long> {
+    boolean existsBySemesterIdAndTeacherId(Long semesterId, Long teacherId);
 
+    int deleteByTeacherId(Long teacherId);
 }

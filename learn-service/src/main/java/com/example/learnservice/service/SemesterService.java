@@ -2,6 +2,7 @@
 
 package com.example.learnservice.service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,22 +21,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.learnservice.client.AccountClient;
+import com.example.learnservice.dto.AccountDTO;
 import com.example.learnservice.dto.SemesterAccountRequest;
 import com.example.learnservice.dto.SemesterCreateRequest;
 import com.example.learnservice.dto.SemesterUpdateRequest;
+import com.example.learnservice.enums.Role;
 import com.example.learnservice.dto.SemesterDetailDTO;
 import com.example.learnservice.dto.SemesterDocumentRequest;
 import com.example.learnservice.dto.SemesterSearchDTO;
+import com.example.learnservice.dto.SemesterTeacherRequest;
 import com.example.learnservice.model.Document;
 import com.example.learnservice.model.Position;
 import com.example.learnservice.model.Semester;
 import com.example.learnservice.model.SemesterAccount;
 import com.example.learnservice.model.SemesterDocument;
+import com.example.learnservice.model.SemesterTeacher;
 import com.example.learnservice.repository.DocumentRepository;
 import com.example.learnservice.repository.PositionRepository;
 import com.example.learnservice.repository.SemesterAccountRepository;
 import com.example.learnservice.repository.SemesterDocumentRepository;
 import com.example.learnservice.repository.SemesterRepository;
+import com.example.learnservice.repository.SemesterTeacherRepository;
 import com.example.learnservice.specification.SemesterSpecification;
 
 import lombok.extern.slf4j.Slf4j;
@@ -58,6 +65,12 @@ public class SemesterService {
     @Autowired
     private SemesterDocumentRepository semesterDocumentRepository;
 
+    @Autowired
+    private SemesterTeacherRepository semesterTeacherRepository;
+
+    @Autowired
+    private AccountClient accountClient;
+
     public List<Semester> getAllSemester() {
         return semesterRepository.findAll();
     }
@@ -65,11 +78,20 @@ public class SemesterService {
     /**
      * Tìm kiếm semester với các tiêu chí đa dạng và phân trang
      */
-    public Page<SemesterDetailDTO> universalSearch(SemesterSearchDTO searchDTO, Pageable pageable) {
+    public Page<SemesterDetailDTO> universalSearch(SemesterSearchDTO searchDTO, Pageable pageable, Long userId,
+            Role userRole) {
         Sort sort = pageable.getSort().and(Sort.by(Sort.Direction.DESC, "createdAt"));
         pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
         Specification<Semester> spec = SemesterSpecification.build(searchDTO);
 
+        // Apply role-based filtering
+        if (userRole == Role.STUDENT) {
+            // Student chỉ thấy semester mà họ được assign vào
+            spec = spec.and(SemesterSpecification.hasStudent(userId));
+        } else if (userRole == Role.TEACHER) {
+            // Teacher chỉ thấy semester mà họ được assign vào
+            spec = spec.and(SemesterSpecification.hasTeacher(userId));
+        }
         Page<Semester> semesterPage = semesterRepository.findAll(spec, pageable);
 
         return semesterPage.map(semester -> {
@@ -94,6 +116,7 @@ public class SemesterService {
         });
     }
 
+    @Transactional
     public Semester saveSemester(SemesterCreateRequest semesterCreateRequest, Long userId) {
         Semester semester = new Semester();
         semester.setName(semesterCreateRequest.getName());
@@ -107,7 +130,24 @@ public class SemesterService {
         semester.setCreatedBy(userId);
         semester.setUpdatedBy(userId);
 
-        return semesterRepository.save(semester);
+        // List<SemesterTeacher> semesterTeachers = validateAndPrepareTeachers(
+        // semester,
+        // semesterCreateRequest.getTeacherIds(),
+        // userId);
+
+        Semester savedSemester = semesterRepository.save(semester);
+
+        // if (!semesterTeachers.isEmpty()) {
+        // semesterTeachers.forEach(st -> st.setSemester(savedSemester));
+        // if (savedSemester.getSemesterTeachers() == null) {
+        // savedSemester.setSemesterTeachers(new ArrayList<>());
+        // }
+        // savedSemester.getSemesterTeachers().addAll(semesterTeachers);
+        // log.info("Assigned {} teachers to semester {}", semesterTeachers.size(),
+        // savedSemester.getId());
+        // }
+
+        return savedSemester;
     }
 
     @Transactional
@@ -128,7 +168,47 @@ public class SemesterService {
         semester.setEndDate(updateRequest.getEndDate());
         semester.setUpdatedBy(userId);
 
+        // Update teachers nếu có trong request
+        // if (updateRequest.getTeacherIds() != null) {
+        // List<SemesterTeacher> newTeachers = validateAndPrepareTeachers(
+        // semester,
+        // updateRequest.getTeacherIds(),
+        // userId);
+
+        // if (semester.getSemesterTeachers() != null) {
+        // semester.getSemesterTeachers().clear();
+        // } else {
+        // semester.setSemesterTeachers(new ArrayList<>());
+        // }
+
+        // if (!newTeachers.isEmpty()) {
+        // newTeachers.forEach(st -> st.setSemester(semester));
+        // semester.getSemesterTeachers().addAll(newTeachers);
+        // log.info("Updated {} teachers for semester {}", newTeachers.size(),
+        // semesterId);
+        // }
+        // }
+
         return semesterRepository.save(semester);
+    }
+
+    /**
+     * Xóa teacher khỏi semester
+     */
+    @Transactional
+    public void removeTeacherFromSemester(Long semesterId, Long teacherId, Long userId) {
+        Semester semester = getSemesterById(semesterId);
+
+        SemesterTeacher toRemove = semester.getSemesterTeachers().stream()
+                .filter(st -> st.getTeacherId().equals(teacherId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Teacher not found in semester"));
+
+        semesterTeacherRepository.delete(toRemove);
+        semester.getSemesterTeachers().remove(toRemove);
+
+        log.info("Removed teacher {} from semester {} by user {}", teacherId, semesterId, userId);
     }
 
     @Transactional
@@ -211,8 +291,9 @@ public class SemesterService {
                 })
                 .collect(Collectors.toList());
 
-        List<SemesterDocument> saved = semesterDocumentRepository.saveAll(newSemesterDocuments);
-        semester.getSemesterDocuments().addAll(saved);
+        // List<SemesterDocument> saved =
+        // semesterDocumentRepository.saveAll(newSemesterDocuments);
+        semester.getSemesterDocuments().addAll(newSemesterDocuments);
 
         log.info("Added {} new documents to semester {}", foundDocuments.size(), semesterId);
     }
@@ -230,7 +311,7 @@ public class SemesterService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Document not found in semester"));
 
-        semesterDocumentRepository.delete(toRemove);
+        // semesterDocumentRepository.delete(toRemove);
         semester.getSemesterDocuments().remove(toRemove);
 
         log.info("Removed document {} from semester {} by user {}", documentCode, semesterId, userId);
@@ -242,6 +323,17 @@ public class SemesterService {
     @Transactional
     public void addAccountsToSemester(Long semesterId, SemesterAccountRequest request, Long userId) {
         Semester semester = getSemesterById(semesterId);
+
+        // Lấy danh sách accountIds từ request
+        List<Long> accountIds = request.getAccountAssignments().stream()
+                .map(SemesterAccountRequest.AccountPositionAssignment::getAccountId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Validate tất cả accounts phải có role STUDENT
+        List<AccountDTO> validAccs = validateStudentAccounts(accountIds);
+        if (validAccs.isEmpty() || validAccs.size() == 0)
+            throw new IllegalArgumentException("Account is not student");
 
         // Get current account-position pairs
         Set<String> currentPairs = semester.getSemesterAccounts().stream()
@@ -278,6 +370,34 @@ public class SemesterService {
 
         semesterAccountRepository.saveAll(newSemesterAccounts);
         log.info("Added {} accounts to semester {}", newAssignments.size(), semesterId);
+    }
+
+    @Transactional
+    public void addTeachersToSemester(Long semesterId, SemesterTeacherRequest request, Long userId) {
+        Semester semester = getSemesterById(semesterId);
+
+        // Lấy danh sách accountIds từ request
+        List<Long> accountIds = request.getTeacherIds().stream()
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Validate tất cả accounts phải có role STUDENT
+        List<AccountDTO> validAccs = validateTeacherAccounts(accountIds);
+        if (validAccs.isEmpty() || validAccs.size() == 0)
+            throw new IllegalArgumentException("Account is not teacher");
+
+        // Create new assignments
+        List<SemesterTeacher> newSemesterTeachers = validAccs.stream()
+                .map(acc -> {
+                    SemesterTeacher st = new SemesterTeacher();
+                    st.setSemester(semester);
+                    st.setTeacherId(acc.getId());
+                    st.setCreatedBy(userId);
+                    return st;
+                }).collect(Collectors.toList());
+
+        semesterTeacherRepository.saveAll(newSemesterTeachers);
+        log.info("Added {} teachers to semester {}", newSemesterTeachers.size(), semesterId);
     }
 
     /**
@@ -350,4 +470,89 @@ public class SemesterService {
     public boolean checkDocumentAccessThroughSemester(Long semesterId, Long accountId, String documentCode) {
         return semesterAccountRepository.existsAccessThroughPosition(semesterId, accountId, documentCode);
     }
+
+    /**
+     * Kiểm tra account có quyền truy cập semester không
+     */
+    public boolean checkSemesterAccessWithTeacher(Long semesterId, Long accountId) {
+        return semesterTeacherRepository.existsBySemesterIdAndTeacherId(semesterId, accountId);
+    }
+
+    /**
+     * // * Validate teachers trước khi assign
+     * // * Trả về list SemesterTeacher entities đã sẵn sàng để lưu
+     * //
+     */
+    // private List<SemesterTeacher> validateAndPrepareTeachers(Semester semester,
+    // List<Long> teacherIds, Long userId) {
+    // if (teacherIds == null || teacherIds.isEmpty()) {
+    // return List.of();
+    // }
+
+    // // Gọi AccountClient để lấy thông tin accounts
+    // List<AccountDTO> accounts = accountClient.getAccountsByIds(teacherIds);
+
+    // // Lọc ra các account có role TEACHER
+    // List<AccountDTO> validTeachers = accounts.stream()
+    // .filter(acc -> acc.getRole() == Role.TEACHER)
+    // .collect(Collectors.toList());
+
+    // // Kiểm tra xem tất cả IDs có đúng là TEACHER không
+    // if (validTeachers.size() != teacherIds.size()) {
+    // List<Long> validTeacherIds = validTeachers.stream()
+    // .map(AccountDTO::getId)
+    // .collect(Collectors.toList());
+
+    // List<Long> invalidIds = teacherIds.stream()
+    // .filter(id -> !validTeacherIds.contains(id))
+    // .collect(Collectors.toList());
+
+    // throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+    // "Invalid teacher IDs (not TEACHER role or not found): " + invalidIds);
+    // }
+
+    // // Tạo SemesterTeacher entities (chưa lưu DB)
+    // return validTeachers.stream()
+    // .map(teacher -> {
+    // SemesterTeacher st = new SemesterTeacher();
+    // st.setSemester(semester);
+    // st.setTeacherId(teacher.getId());
+    // st.setCreatedBy(userId);
+    // return st;
+    // })
+    // .collect(Collectors.toList());
+    // }
+
+    /**
+     * Validate accounts trước khi assign vào semester
+     * Chỉ chấp nhận accounts có role STUDENT
+     */
+    private List<AccountDTO> validateStudentAccounts(List<Long> accountIds) {
+        // Gọi AccountClient để lấy thông tin accounts
+        List<AccountDTO> accounts = accountClient.getAccountsByIds(accountIds);
+
+        // Lọc ra các account có role STUDENT
+        List<AccountDTO> validStudents = accounts.stream()
+                .filter(acc -> acc.getRole() == Role.STUDENT)
+                .collect(Collectors.toList());
+
+        return validStudents;
+    }
+
+    /**
+     * Validate accounts trước khi assign vào semester
+     * Chỉ chấp nhận accounts có role TEACHER
+     */
+    private List<AccountDTO> validateTeacherAccounts(List<Long> accountIds) {
+        // Gọi AccountClient để lấy thông tin accounts
+        List<AccountDTO> accounts = accountClient.getAccountsByIds(accountIds);
+
+        // Lọc ra các account có role TEACHER
+        List<AccountDTO> validTeachers = accounts.stream()
+                .filter(acc -> acc.getRole() == Role.TEACHER)
+                .collect(Collectors.toList());
+
+        return validTeachers;
+    }
+
 }

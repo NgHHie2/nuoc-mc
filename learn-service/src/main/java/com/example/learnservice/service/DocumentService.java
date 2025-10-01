@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -42,6 +43,8 @@ import com.example.learnservice.repository.PositionRepository;
 import com.example.learnservice.repository.TagRepository;
 import com.example.learnservice.specification.DocumentSpecification;
 import com.example.learnservice.util.FileUtil;
+import com.example.learnservice.util.listener.event.DocumentCreatedEvent;
+import com.example.learnservice.util.listener.event.DocumentDeletedEvent;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -60,6 +63,9 @@ public class DocumentService {
     @Autowired
     private FileUtil fileUtil;
 
+    @Autowired
+    private ApplicationEventPublisher applicationEventPublisher;
+
     @Value("${file.upload.dir:./uploads}")
     private String uploadDir;
 
@@ -67,6 +73,7 @@ public class DocumentService {
         return documentRepository.save(document);
     }
 
+    @Transactional
     public Document processAndSaveDocument(MultipartFile file, Long userId, DocumentUploadRequest request)
             throws Exception {
         // Validate file
@@ -132,6 +139,7 @@ public class DocumentService {
             savedDocument.setCatalogs(catalogs);
         }
 
+        applicationEventPublisher.publishEvent(new DocumentCreatedEvent(savedDocument));
         // Lưu lại để persist tags và catalogs
         return documentRepository.save(savedDocument);
     }
@@ -312,8 +320,8 @@ public class DocumentService {
 
         // Xóa document (cascade sẽ tự động xóa tags và catalogs)
         documentRepository.delete(document);
-
         log.info("Document deleted successfully: {}", documentCode);
+        applicationEventPublisher.publishEvent(new DocumentDeletedEvent(document));
     }
 
 }

@@ -1,16 +1,20 @@
 package com.example.statsservice.model;
 
 import java.time.LocalDateTime;
+
+import com.example.statsservice.enums.Role;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.Data;
 
 @Data
+@Entity
 public class Account {
     private Integer id;
     private String username;
-    private String password;
-    private String firstName;
-    private String lastName;
-    private LocalDateTime birthDay;
-    private String phoneNumber;
-    private String email;
+
+    @Enumerated(EnumType.STRING)
+    private Role role;
 }

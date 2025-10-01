@@ -51,7 +51,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleNumberFormat(NumberFormatException ex) {
         Map<String, Object> error = new HashMap<>();
         error.put("error", "Invalid User Id");
-        error.put("message", "X-User-Id header must be a valid number");
+        error.put("message", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 

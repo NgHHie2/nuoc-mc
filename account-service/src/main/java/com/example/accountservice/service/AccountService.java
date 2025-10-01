@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import com.example.accountservice.dto.AccountSearchDTO;
 import com.example.accountservice.dto.PasswordChangeDTO;
+import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.repository.AccountRepository;
 import com.example.accountservice.specification.AccountSpecification;
@@ -73,6 +74,14 @@ public class AccountService {
 
     public Optional<Account> findByEmail(String email) {
         return accountRepository.findByEmailAndVisible(email, 1);
+    }
+
+    public Optional<Account> findStudentByCccd(String cccd) {
+        return accountRepository.findByCccdAndVisibleAndRole(cccd, 1, Role.STUDENT);
+    }
+
+    public Optional<Account> findTeacherByCccd(String cccd) {
+        return accountRepository.findByCccdAndVisibleAndRole(cccd, 1, Role.TEACHER);
     }
 
     @Transactional

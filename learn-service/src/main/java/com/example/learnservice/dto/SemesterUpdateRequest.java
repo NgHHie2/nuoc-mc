@@ -20,5 +20,5 @@ public class SemesterUpdateRequest {
     @NotNull
     private LocalDateTime endDate;
 
-    private List<Long> teacherIds;
+    // private List<Long> teacherIds;
 }
