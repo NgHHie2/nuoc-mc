@@ -26,7 +26,7 @@ public class AccountPositionService {
     public List<AccountPosition> getPositionsByAccount(Long accountId) {
         Optional<Account> account = accountRepository.findById(accountId);
         if (account.isEmpty()) {
-            throw new IllegalArgumentException("Account not found");
+            throw new IllegalArgumentException("Account not found with id: " + accountId);
         }
         return accountPositionRepository.findByAccount(account.get());
     }
@@ -34,7 +34,7 @@ public class AccountPositionService {
     public List<AccountPosition> getAccountsByPosition(Long positionId) {
         Optional<Position> position = positionRepository.findById(positionId);
         if (position.isEmpty()) {
-            throw new IllegalArgumentException("Position not found");
+            throw new IllegalArgumentException("Position not found with id: " + positionId);
         }
         return accountPositionRepository.findByPosition(position.get());
     }
@@ -44,10 +44,10 @@ public class AccountPositionService {
         Optional<Position> position = positionRepository.findById(positionId);
 
         if (account.isEmpty()) {
-            throw new IllegalArgumentException("Account not found");
+            throw new IllegalArgumentException("Account not found with id: " + accountId);
         }
         if (position.isEmpty()) {
-            throw new IllegalArgumentException("Position not found");
+            throw new IllegalArgumentException("Position not found with id: " + positionId);
         }
 
         // Kiểm tra đã tồn tại chưa

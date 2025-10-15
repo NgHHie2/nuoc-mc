@@ -43,6 +43,7 @@ import com.example.learnservice.repository.PositionRepository;
 import com.example.learnservice.repository.TagRepository;
 import com.example.learnservice.specification.DocumentSpecification;
 import com.example.learnservice.util.FileUtil;
+import com.example.learnservice.util.ValidateUtil;
 import com.example.learnservice.util.listener.event.DocumentCreatedEvent;
 import com.example.learnservice.util.listener.event.DocumentDeletedEvent;
 
@@ -171,8 +172,8 @@ public class DocumentService {
         return filePath;
     }
 
-    public Path getPreviewPath(Document document) {
-        String fileName = document.getCode() + ".jpg";
+    public Path getPreviewPath(String documentCode) {
+        String fileName = documentCode + ".jpg";
         Path filePath = Paths.get(uploadDir, "preview", fileName);
         if (!Files.exists(filePath)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found");
@@ -207,6 +208,10 @@ public class DocumentService {
      * @return Page<Document> - Kết quả phân trang
      */
     public Page<Document> universalSearch(DocumentSearchDTO searchDTO, Pageable pageable) {
+        searchDTO.setKeyword(ValidateUtil.validateKeyword(searchDTO.getKeyword()));
+        searchDTO.setPositionIds(ValidateUtil.cleanPositionIds(searchDTO.getPositionIds()));
+        searchDTO.setSearchFields(ValidateUtil.validateSearchFields(searchDTO.getSearchFields()));
+
         Sort sort = pageable.getSort().and(Sort.by(Sort.Direction.DESC, "createdAt"));
         pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
         Specification<Document> spec = DocumentSpecification.build(searchDTO);

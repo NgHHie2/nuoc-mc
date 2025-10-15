@@ -15,39 +15,32 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Entity
 @Data
-public class Position {
+public class Test {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "Position name is required")
     private String name;
+    private Boolean visible = false;
+
+    @ManyToOne
+    @JoinColumn(name = "position_id")
+    private Position position;
 
     @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<Catalog> catalogs;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<SemesterAccount> semesterAccounts;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<Test> tests;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @OneToMany(mappedBy = "test", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<SemesterTest> semesterTests;
 
     @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<QuestionPosition> questionPositions;
+    @OneToMany(mappedBy = "test", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private List<TestQuestion> testQuestions;
 
     @JsonIgnore
     @Column(updatable = false)

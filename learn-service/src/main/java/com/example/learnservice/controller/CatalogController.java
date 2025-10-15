@@ -13,7 +13,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.learnservice.annotation.RequireRole;
 import com.example.learnservice.dto.CatalogUpdateRequest;
+import com.example.learnservice.enums.Role;
 import com.example.learnservice.model.Catalog;
 import com.example.learnservice.model.Document;
 import com.example.learnservice.model.Tag;
@@ -37,6 +39,7 @@ public class CatalogController {
     /**
      * Cập nhật thông tin tài liệu
      */
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     @PutMapping("/catalog/{documentCode}")
     public ResponseEntity<?> updateCatalogsDocument(
             @PathVariable String documentCode,

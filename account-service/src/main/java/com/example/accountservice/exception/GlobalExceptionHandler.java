@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.persistence.EntityNotFoundException;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -48,6 +50,14 @@ public class GlobalExceptionHandler {
         error.put("error", "Invalid User Id");
         error.put("message", "X-User-Id header must be a valid number");
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(EntityNotFoundException.class)
+    public ResponseEntity<?> handleEntityNotFound(EntityNotFoundException ex) {
+        Map<String, Object> error = new HashMap<>();
+        error.put("error", "Entity Not Found");
+        error.put("message", ex.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
 
 }

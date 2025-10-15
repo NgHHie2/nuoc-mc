@@ -1,5 +1,7 @@
 package com.example.learnservice.repository;
 
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -30,5 +32,7 @@ public interface SemesterAccountRepository extends JpaRepository<SemesterAccount
                         @Param("accountId") Long accountId);
 
         int deleteByAccountId(Long accountId);
+
+        Optional<SemesterAccount> findBySemesterIdAndAccountId(Long semesterId, Long accountId);
 
 }

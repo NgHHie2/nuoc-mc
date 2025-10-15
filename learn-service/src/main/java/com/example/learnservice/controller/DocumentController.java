@@ -58,6 +58,7 @@ public class DocumentController {
     @Autowired
     private DocumentService documentService;
 
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
     public ResponseEntity<?> uploadFile(
             @Valid @ModelAttribute DocumentUploadRequest uploadRequest,
@@ -185,9 +186,7 @@ public class DocumentController {
      */
     @GetMapping("/preview/{documentCode}")
     public ResponseEntity<byte[]> getPreview(@PathVariable String documentCode) throws IOException {
-        Document document = documentService.getDocumentByCode(documentCode);
-
-        Path previewPath = documentService.getPreviewPath(document);
+        Path previewPath = documentService.getPreviewPath(documentCode);
         byte[] previewBytes = fileUtil.getPreviewImage(previewPath);
 
         return ResponseEntity.ok()
@@ -209,6 +208,7 @@ public class DocumentController {
      * Output:
      * - Page<Document>: Danh sách tài liệu phân trang với metadata
      */
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     @GetMapping("/search")
     public Page<Document> searchDocuments(
             @RequestParam(value = "keyword", required = false) String keyword,
@@ -227,12 +227,14 @@ public class DocumentController {
         return documents;
     }
 
+    @RequireRole({ Role.TEACHER, Role.ADMIN, Role.STUDENT })
     @GetMapping("/{code}")
     public Document getDocumentByCode(@PathVariable String code) {
         log.info("get document by code: " + code);
         return documentService.getDocumentByCode(code);
     }
 
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     @GetMapping("/number/{documentNumber}")
     public ResponseEntity<Document> getDocumentByDocumentNumber(@PathVariable String documentNumber) {
         log.info("get document by number: " + documentNumber);
@@ -245,6 +247,7 @@ public class DocumentController {
     /**
      * Cập nhật thông tin tài liệu
      */
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     @PutMapping("/{documentCode}")
     public ResponseEntity<?> updateDocument(
             @PathVariable String documentCode,
@@ -277,6 +280,7 @@ public class DocumentController {
     /**
      * Xóa tài liệu
      */
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
     @DeleteMapping("/{documentCode}")
     public ResponseEntity<?> deleteDocument(
             @PathVariable String documentCode,

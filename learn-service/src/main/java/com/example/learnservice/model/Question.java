@@ -16,38 +16,27 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Entity
 @Data
-public class Position {
+public class Question {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "Position name is required")
-    private String name;
+    @Column(columnDefinition = "TEXT")
+    private String text;
 
     @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<Catalog> catalogs;
+    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private List<TestQuestion> testQuestions;
 
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<SemesterAccount> semesterAccounts;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<Test> tests;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<SemesterTest> semesterTests;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<QuestionPosition> questionPositions;
+
+    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private List<Answer> answers;
 
     @JsonIgnore
     @Column(updatable = false)
@@ -56,7 +45,6 @@ public class Position {
     @JsonIgnore
     private Long updatedBy;
 
-    @JsonIgnore
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

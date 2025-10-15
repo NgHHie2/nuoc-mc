@@ -4,17 +4,22 @@ import java.time.LocalDateTime;
 
 import com.example.statsservice.enums.Role;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
 
 @Data
 @Entity
 public class Account {
-    private Integer id;
+    @Id
+    private Long id;
+
     private String username;
 
     @Enumerated(EnumType.STRING)
     private Role role;
+
+    @CreationTimestamp
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
 }

@@ -41,6 +41,9 @@ public class Semester {
     @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<SemesterTeacher> semesterTeachers;
 
+    @OneToMany(mappedBy = "semester", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private List<SemesterTest> semesterTests;
+
     @JsonIgnore
     @Column(updatable = false)
     private Long createdBy;

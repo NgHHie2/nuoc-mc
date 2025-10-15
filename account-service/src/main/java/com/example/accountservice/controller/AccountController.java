@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.accountservice.annotation.RequireRole;
+import com.example.accountservice.dto.AccountCreateRequest;
 import com.example.accountservice.dto.AccountSearchDTO;
 import com.example.accountservice.dto.PasswordChangeDTO;
 import com.example.accountservice.enums.Role;
@@ -40,8 +41,7 @@ public class AccountController {
     private AccountService accountService;
 
     /**
-     * Tìm kiếm tài khoản theo từ khóa, theo filter role hoặc position với phân
-     * trang
+     * Tìm kiếm tài khoản theo từ khóa, theo filter role hoặc position với phân trang
      * Quyền: Chỉ ADMIN mới được sử dụng
      * 
      * Input:
@@ -83,11 +83,12 @@ public class AccountController {
      * Output:
      * - String: Thông báo kết quả xóa
      */
+
     @DeleteMapping("/{id}")
     @RequireRole({ Role.ADMIN })
     public String deleteAccount(@PathVariable Long id) {
         Boolean success = accountService.deleteAccount(id);
-        return success ? "Tài khoản đã được xóa thành công!" : "Không tìm thấy tài khoản!";
+        return success ? "Account Deleted Successfully!" : "An Error Occurred!";
     }
 
     /**
@@ -130,9 +131,10 @@ public class AccountController {
      * Quyền: Chỉ ADMIN mới được sử dụng
      * 
      * Input:
-     * - account (request body): Thông tin tài khoản mới (firstName, lastName, cccd,
-     * role, email...)
-     * - Username sẽ được tự động sinh từ tên
+     * - account (request body): Thông tin tài khoản mới (firstName, lastName, cccd, role, email,...)
+     * - KHÔNG TRUYỀN VÀO ID, USERNAME, PASSWORD, VISIBLE (Không hiển  thị các trường này ở FE)
+     * - firstName, lastName, cccd bắt buộc phải điền
+     * - Username sẽ được tự động sinh từ họ tên
      * - Password mặc định là "123456Aa@"
      * 
      * Output:
@@ -140,7 +142,11 @@ public class AccountController {
      */
     @PostMapping
     @RequireRole({ Role.ADMIN })
-    public Account createAccount(@Valid @RequestBody Account account) {
+    public Account createAccount(@Valid @RequestBody AccountCreateRequest request) {
+        Account account = new Account();
+        account.setCccd(request.getCccd());
+        account.setFirstName(request.getFirstName());
+        account.setLastName(request.getLastName());
         Account savedAccount = accountService.createAccount(account);
         return savedAccount;
     }
@@ -166,6 +172,7 @@ public class AccountController {
 
     /**
      * Admin đổi password cho user bất kỳ
+     *  --- Đổi password của Admin và User khác nhau ở Input: Admin không cần oldPassword ---
      * Chức năng: Cho phép admin thay đổi password của bất kỳ user nào
      * Quyền: Chỉ ADMIN mới được sử dụng
      * 
@@ -186,6 +193,9 @@ public class AccountController {
     }
 
     /**
+     * USER HIỆN KHÔNG THỂ ĐỔI PASSWORD (có thể cập nhật lại sau)
+     * --- Đổi password của Admin và User khác nhau ở Input: Admin không cần oldPassword ---
+     * 
      * User đổi password của chính mình
      * Chức năng: Cho phép user thay đổi password của chính mình
      * Quyền: Tất cả user đã đăng nhập
@@ -200,17 +210,17 @@ public class AccountController {
      * Output:
      * - Boolean: true nếu đổi password thành công, false nếu thất bại
      */
-    @PutMapping("/change-password")
-    public Boolean updatePasswordByUser(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdString,
-            @Valid @RequestBody PasswordChangeDTO passwordChangeDTO) {
+    // @PutMapping("/change-password")
+    // public Boolean updatePasswordByUser(
+    //         @RequestHeader(value = "X-User-Id", required = false) String userIdString,
+    //         @Valid @RequestBody PasswordChangeDTO passwordChangeDTO) {
 
-        if (passwordChangeDTO.getOldPassword() == null || passwordChangeDTO.getOldPassword().isEmpty()) {
-            throw new IllegalArgumentException("Old password must not be empty");
-        }
-        Long accountId = Long.valueOf(userIdString);
-        return accountService.updatePasswordByUser(accountId, passwordChangeDTO);
-    }
+    //     if (passwordChangeDTO.getOldPassword() == null || passwordChangeDTO.getOldPassword().isEmpty()) {
+    //         throw new IllegalArgumentException("Old password must not be empty");
+    //     }
+    //     Long accountId = Long.valueOf(userIdString);
+    //     return accountService.updatePasswordByUser(accountId, passwordChangeDTO);
+    // }
 
     /**
      * Lấy thông tin nhiều tài khoản theo danh sách ID

@@ -3,8 +3,6 @@ package com.example.accountservice.service;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,18 +47,27 @@ public class AccountService {
     @Autowired
     private ApplicationEventPublisher applicationEventPublisher;
 
+    // Lấy tài khoản theo ID, chỉ lấy tài khoản chưa xóa (visible = 1)
+    // Trả về exception nếu không tìm thấy (do sai id hoặc tài khoản đã bị xóa)
     public Optional<Account> getAccountById(Long id) {
-        return accountRepository.findByIdAndVisible(id, 1);
+        Optional<Account> accountOpt = accountRepository.findByIdAndVisible(id, 1);
+        if (accountOpt.isEmpty()) {
+            throw new EntityNotFoundException("Account not found with id: " + id);
+        }
+        return accountOpt;
     }
 
+    // Lấy tài khoản theo tên người dùng, chỉ lấy tài khoản chưa xóa (visible = 1)
     public Optional<Account> findByUsernameAndVisible(String username) {
         return accountRepository.findByUsernameAndVisible(username, 1);
     }
 
+    // Kiểm tra có trùng CCCD không
     public boolean existsByCccd(String cccd) {
         return accountRepository.existsByCccdAndVisible(cccd, 1);
     }
 
+    // Kiểm tra có trùng email không
     public boolean existsByEmail(String email) {
         if (email == null || email.trim().isEmpty()) {
             return false;
@@ -68,10 +75,12 @@ public class AccountService {
         return accountRepository.existsByEmailAndVisible(email, 1);
     }
 
+    // Tìm kiếm theo CCCD
     public Optional<Account> findByCccd(String cccd) {
         return accountRepository.findByCccdAndVisible(cccd, 1);
     }
 
+    // Tìm kiếm theo email
     public Optional<Account> findByEmail(String email) {
         return accountRepository.findByEmailAndVisible(email, 1);
     }
@@ -84,21 +93,41 @@ public class AccountService {
         return accountRepository.findByCccdAndVisibleAndRole(cccd, 1, Role.TEACHER);
     }
 
+    /*
+     * SOFT DELETE
+     * Chức năng: Xóa mềm tài khoản (set visible = 0)
+     * Conditions:
+     * - Tài khoản tồn tại và chưa bị xóa (visible = 1)
+     * Exception:
+     * - Tài khoản không tồn tại: trả về EntityNotFoundException
+     * - Tài khoản đã bị xóa (visible = 0): trả về IllegalArgumentException
+     */
     @Transactional
     public Boolean deleteAccount(Long id) {
-        // Soft delete: set visible = 0
-        Optional<Account> account = accountRepository.findByIdAndVisible(id, 1);
-        if (account.isPresent()) {
-            Account acc = account.get();
-            acc.setVisible(0);
-            Account deletedAccount = accountRepository.save(acc);
-            log.info("Soft deleted account id: {}", id);
-            applicationEventPublisher.publishEvent(new UserDeletedEvent(deletedAccount));
-            return true;
+        Optional<Account> accountOpt = accountRepository.findById(id);
+        if (accountOpt.isEmpty()) {
+            throw new EntityNotFoundException("Account not found with id: " + id);
         }
-        return false;
+        Account account = accountOpt.get();
+        if (account.getVisible() == 0) {
+            throw new IllegalArgumentException("Account with id: " + id + " already deleted");
+        }
+        account.setVisible(0);
+        Account deletedAccount = accountRepository.save(account);
+        log.info("Soft deleted account id: {}", id);
+        applicationEventPublisher.publishEvent(new UserDeletedEvent(deletedAccount));
+        return true;
     }
 
+    /*
+     * CREATE ACCOUNT
+     * Chức năng: Tạo tài khoản mới với username và password tự động sinh
+     * Conditions:
+     * - Không có tài khoản nào trùng CCCD và email (nếu có)
+     * Exception:
+     * - Tài khoản đã tồn tại (trùng CCCD hoặc email): trả về
+     * IllegalArgumentException
+     */
     @Transactional
     public Account createAccount(Account account) {
         if (existsByCccd(account.getCccd())) {
@@ -127,11 +156,22 @@ public class AccountService {
         return savedAccount;
     }
 
+    /*
+     * UPDATE ACCOUNT
+     * Chức năng: Cập nhật thông tin tài khoản (giữ nguyên password và visible)
+     * Conditions:
+     * - Tài khoản tồn tại và chưa bị xóa (visible = 1)
+     * - Không có tài khoản nào trùng với data CCCD và email được cập nhật
+     * Exception:
+     * - Tài khoản không tồn tại (sai id hoặc đã xóa): trả về
+     * EntityNotFoundException
+     * - Trùng thông tin: trả về IllegalArgumentException
+     */
     @Transactional
     public Account updateAccount(Account account) {
         Optional<Account> existingAccount = getAccountById(account.getId());
         if (existingAccount.isEmpty()) {
-            throw new IllegalArgumentException("Account not found");
+            throw new EntityNotFoundException("Account not found with id: " + account.getId());
         }
 
         // Kiểm tra CCCD trùng lặp (trừ chính nó)
@@ -159,6 +199,18 @@ public class AccountService {
         return savedAccount;
     }
 
+    /*
+     * UPDATE PASSWORD BY ADMIN
+     * Chức năng: ADMIN cập nhật password của user (Admin không cần oldPassword)
+     * Conditions:
+     * - Tài khoản tồn tại và chưa bị xóa (visible = 1)
+     * - newPassword và confirmPassword phải giống nhau
+     * Exception:
+     * - Tài khoản không tồn tại (sai id hoặc đã xóa): trả về
+     * EntityNotFoundException
+     * - Mật khẩu mới và phần xác nhận không giống nhau: trả về
+     * IllegalArgumentException
+     */
     @Transactional
     public Boolean updatePasswordByAdmin(Long accountId, PasswordChangeDTO passwordChangeDTO) {
         Account account = getAccountById(accountId)
@@ -175,25 +227,38 @@ public class AccountService {
         return true;
     }
 
-    @Transactional
-    public Boolean updatePasswordByUser(Long accountId, PasswordChangeDTO passwordChangeDTO) {
-        Account account = getAccountById(accountId)
-                .orElseThrow(() -> new EntityNotFoundException("Account not found with id: " + accountId));
+    /*
+     * UPDATE PASSWORD BY USER
+     * Tương tự hàm của ADMIN nhưng có thêm bước kiểm tra oldPassword
+     * Cmt lại do USER KHÔNG ĐƯỢC ĐỔI PASSWORD (Có thể cập nhật lại sau này)
+     */
 
-        if (!passwordEncoder.matches(passwordChangeDTO.getOldPassword(), account.getPassword())) {
-            throw new IllegalArgumentException("Old password is wrong");
-        }
+    // @Transactional
+    // public Boolean updatePasswordByUser(Long accountId, PasswordChangeDTO
+    // passwordChangeDTO) {
+    // Account account = getAccountById(accountId)
+    // .orElseThrow(() -> new EntityNotFoundException("Account not found with id: "
+    // + accountId));
 
-        if (!passwordChangeDTO.getNewPassword().equals(passwordChangeDTO.getConfirmPassword())) {
-            throw new IllegalArgumentException("New password and confirm password do not match");
-        }
+    // if (!passwordEncoder.matches(passwordChangeDTO.getOldPassword(),
+    // account.getPassword())) {
+    // throw new IllegalArgumentException("Old password is wrong");
+    // }
 
-        String encodedPassword = passwordEncoder.encode(passwordChangeDTO.getNewPassword());
-        account.setPassword(encodedPassword);
-        accountRepository.save(account);
+    // if
+    // (!passwordChangeDTO.getNewPassword().equals(passwordChangeDTO.getConfirmPassword()))
+    // {
+    // throw new IllegalArgumentException("New password and confirm password do not
+    // match");
+    // }
 
-        return true;
-    }
+    // String encodedPassword =
+    // passwordEncoder.encode(passwordChangeDTO.getNewPassword());
+    // account.setPassword(encodedPassword);
+    // accountRepository.save(account);
+
+    // return true;
+    // }
 
     public Account saveAccount(Account account) {
         // Set visible = 1 nếu chưa có giá trị
@@ -204,8 +269,15 @@ public class AccountService {
         return accountRepository.save(account);
     }
 
+    /*
+     * UNIVERSAL SEARCH
+     * Chức năng: Tìm kiếm tài khoản theo nhiều tiêu chí khác nhau với phân trang
+     * 
+     * Exceptions:
+     * - Nếu không tìm thấy kết quả nào thì trả về EntityNotFoundException
+     */
     public Page<Account> universalSearch(AccountSearchDTO searchDTO, Pageable pageable) {
-        // Validate input
+        // Validate input bằng ValidateUtil
         searchDTO.setKeyword(ValidateUtil.validateKeyword(searchDTO.getKeyword()));
         searchDTO.setPositionIds(ValidateUtil.cleanPositionIds(searchDTO.getPositionIds()));
         searchDTO.setSearchFields(ValidateUtil.validateSearchFields(searchDTO.getSearchFields()));
@@ -213,7 +285,13 @@ public class AccountService {
         Sort sort = pageable.getSort().and(Sort.by(Sort.Direction.DESC, "createdAt"));
         pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
         Specification<Account> spec = AccountSpecification.build(searchDTO);
-        return accountRepository.findAll(spec, pageable);
+        Page<Account> accountPage = accountRepository.findAll(spec, pageable);
+
+        if (accountPage.isEmpty()) {
+            throw new EntityNotFoundException("No accounts found matching the criteria");
+        }
+
+        return accountPage;
     }
 
     /**

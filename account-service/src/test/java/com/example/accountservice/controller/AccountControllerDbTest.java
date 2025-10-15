@@ -193,7 +193,8 @@ class AccountControllerDbTest {
         mockMvc.perform(delete("/account/" + studentAccount.getId())
                 .header("X-User-Role", "ADMIN"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Tài khoản đã được xóa thành công!"));
+                .andExpect(jsonPath("$.deleted").value(true))
+                .andExpect(jsonPath("$.message").value("Account deleted successfully"));
 
         // Verify soft delete
         Account deletedAccount = accountRepository.findById(studentAccount.getId()).orElse(null);
@@ -202,6 +203,37 @@ class AccountControllerDbTest {
 
         // Verify không tìm thấy với findByIdAndVisible
         assert accountRepository.findByIdAndVisible(studentAccount.getId(), 1).isEmpty();
+    }
+
+    @Test
+    void deleteAccount_WithH2Database_InvalidUser() throws Exception {
+        // When & Then
+        mockMvc.perform(delete("/account/" + 9999)
+                .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Account not found"))
+                .andExpect(jsonPath("$.error").value("Invalid User"));
+    }
+
+    @Test
+    void deleteAccount_WithH2Database_AlreadyDeleted() throws Exception {
+        // Given - Xóa trước đó
+        studentAccount.setVisible(0);
+        accountRepository.save(studentAccount);
+
+        Account deletedAccount = accountRepository.findById(studentAccount.getId()).orElse(null);
+        assert deletedAccount != null;
+        assert deletedAccount.getVisible() == 0; // Already soft deleted
+
+        // Verify không tìm thấy với findByIdAndVisible
+        assert accountRepository.findByIdAndVisible(studentAccount.getId(), 1).isEmpty();
+        
+        // When & Then
+        mockMvc.perform(delete("/account/" + studentAccount.getId())
+                .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Account already deleted"))
+                .andExpect(jsonPath("$.error").value("Invalid account data"));
     }
 
     @Test

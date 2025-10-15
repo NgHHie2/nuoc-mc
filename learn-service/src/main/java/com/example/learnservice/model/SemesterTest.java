@@ -15,39 +15,38 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Entity
 @Data
-public class Position {
+public class SemesterTest {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "Position name is required")
+    private LocalDateTime startDate;
+    private LocalDateTime endDate;
     private String name;
 
     @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<Catalog> catalogs;
+    @ManyToOne
+    @JoinColumn(name = "semester_id")
+    private Semester semester;
+
+    @ManyToOne
+    @JoinColumn(name = "test_id")
+    private Test test;
+
+    @ManyToOne
+    @JoinColumn(name = "position_id")
+    private Position position;
 
     @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<SemesterAccount> semesterAccounts;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<Test> tests;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<SemesterTest> semesterTests;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<QuestionPosition> questionPositions;
+    @OneToMany(mappedBy = "semesterTest", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private List<Result> results;
 
     @JsonIgnore
     @Column(updatable = false)

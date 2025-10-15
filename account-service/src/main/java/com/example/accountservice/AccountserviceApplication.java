@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.EnableAsync;
 
+import com.example.accountservice.dto.AccountDTO;
 import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
@@ -22,7 +23,7 @@ public class AccountserviceApplication implements CommandLineRunner {
 	private AccountService accountService;
 
 	@Autowired
-	private KafkaTemplate<String, Account> kafkaTemplate;
+	private KafkaTemplate<String, AccountDTO> kafkaTemplate;
 
 	public static void main(String[] args) {
 		SpringApplication.run(AccountserviceApplication.class, args);

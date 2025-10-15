@@ -27,7 +27,7 @@ services:
     networks:
       - microservice-network
   eureka-server:
-    image: eureka-server:latest
+    image: nghhie/eureka-server:latest
     container_name: eureka-server
     ports:
       - "8761:8761"
@@ -38,7 +38,7 @@ services:
       - microservice-network
 
   api-gateway:
-    image: api-gateway:latest 
+    image: nghhie/api-gateway:latest 
     container_name: api-gateway
     ports:
       - "8080:8080"
@@ -53,7 +53,7 @@ services:
       - microservice-network
 
   account-service:
-    image: account-service:latest
+    image: nghhie/account-service:latest
     container_name: account-service
     ports:
       - "8082:8082"
@@ -70,57 +70,11 @@ services:
       - SPRING_DATASOURCE_PASSWORD=1111
       # Kafka connection cho Docker (nếu có)
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - API_GATEWAT_URL=
     depends_on:
       - eureka-server
       - postgres-account
       - redis
-    networks:
-      - microservice-network
-
-  learn-service:
-    image: learn-service:latest
-    container_name: learn-service
-    ports:
-      - "8084:8084"
-    environment:
-      - JAVA_OPTS=-Xmx384m -Xms128m -Duser.timezone=Asia/Ho_Chi_Minh
-      - TZ=Asia/Ho_Chi_Minh
-      - SPRING_PROFILES_ACTIVE=dev
-      - EUREKA_SERVER_HOST=eureka-server
-      - FILE_UPLOAD_DIR=/app/uploads
-      # Database connection cho Docker
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-learn-dev:5432/learnservicedb
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=1111
-      # Kafka connection cho Docker (nếu có)
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-    depends_on:
-      - eureka-server
-      - postgres-learn
-    volumes:
-      - ../learn-service/uploads:/app/uploads
-    networks:
-      - microservice-network
-
-  stats-service:
-    image: stats-service:latest
-    container_name: stats-service
-    ports:
-      - "8081:8081"
-    environment:
-      - JAVA_OPTS=-Xmx384m -Xms128m -Duser.timezone=Asia/Ho_Chi_Minh
-      - TZ=Asia/Ho_Chi_Minh
-      - SPRING_PROFILES_ACTIVE=dev
-      - EUREKA_SERVER_HOST=eureka-server
-      # Database connection cho Docker
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-stats-dev:5432/statsservicedb
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=1111
-      # Kafka connection cho Docker (nếu có)
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-    depends_on:
-      - eureka-server
-      - postgres-stats
     networks:
       - microservice-network
 
@@ -154,33 +108,6 @@ services:
     networks:
       - microservice-network
 
-  postgres-stats:
-    image: postgres:15
-    container_name: postgres-stats-dev
-    ports:
-      - "5435:5432"
-    environment:
-      POSTGRES_DB: statsservicedb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1111
-    volumes:
-      - postgres_stats_data:/var/lib/postgresql/data
-    networks:
-      - microservice-network  
-
-  # PgAdmin for database management
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: pgadmin
-    ports:
-      - "5050:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - microservice-network
 
   redis:
     image: redis:7-alpine
@@ -193,25 +120,10 @@ services:
     networks:
       - microservice-network
 
-  nextjs: 
-    image: nextjs-app:latest
-    container_name: nextjs-app
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://nextjs:3000
-      - BACKEND_API_URL=http://api-gateway:8080
-    restart: always
-    command: pnpm start
-    networks:
-      - microservice-network
-
 volumes:
   kafka_shared_data:
   postgres_account_data:
   postgres_learn_data:
-  postgres_stats_data:
-  pgadmin_data:
   redis_data:
 
 networks:

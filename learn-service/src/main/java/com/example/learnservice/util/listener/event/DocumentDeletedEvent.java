@@ -11,6 +11,7 @@ public class DocumentDeletedEvent {
     private DocumentDTO document;
 
     public DocumentDeletedEvent(Document doc) {
+        this.document = new DocumentDTO();
         this.document.setId(doc.getId());
         this.document.setFormat(doc.getFormat());
     }

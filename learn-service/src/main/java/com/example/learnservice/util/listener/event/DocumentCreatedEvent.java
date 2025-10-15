@@ -11,6 +11,7 @@ public class DocumentCreatedEvent {
     private DocumentDTO document;
 
     public DocumentCreatedEvent(Document doc) {
+        this.document = new DocumentDTO();
         this.document.setId(doc.getId());
         this.document.setFormat(doc.getFormat());
     }

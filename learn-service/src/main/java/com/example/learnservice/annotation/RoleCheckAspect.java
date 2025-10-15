@@ -2,6 +2,8 @@ package com.example.learnservice.annotation;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 
@@ -16,6 +18,7 @@ import com.example.learnservice.enums.Role;
 
 @Aspect
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class RoleCheckAspect {
 
@@ -25,7 +28,7 @@ public class RoleCheckAspect {
     public void checkRole(JoinPoint joinPoint, RequireRole requireRole) {
         String roleHeader = request.getHeader("X-User-Role");
         Role userRole = parseRole(roleHeader);
-
+        log.info(roleHeader);
         if (userRole == null || !Set.of(requireRole.value()).contains(userRole)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Permission denied");
         }

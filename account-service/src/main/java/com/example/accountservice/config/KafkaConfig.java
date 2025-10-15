@@ -12,6 +12,7 @@ import org.springframework.kafka.core.*;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 
+import com.example.accountservice.dto.AccountDTO;
 import com.example.accountservice.model.Account;
 
 import java.util.HashMap;
@@ -25,7 +26,7 @@ public class KafkaConfig {
 
     // Producer Configuration
     @Bean
-    public ProducerFactory<String, Account> producerFactory() {
+    public ProducerFactory<String, AccountDTO> producerFactory() {
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
@@ -34,7 +35,7 @@ public class KafkaConfig {
     }
 
     @Bean
-    public KafkaTemplate<String, Account> kafkaTemplate() {
+    public KafkaTemplate<String, AccountDTO> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
     }
 

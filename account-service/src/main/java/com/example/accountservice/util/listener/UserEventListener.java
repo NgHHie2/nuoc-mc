@@ -61,8 +61,6 @@ public class UserEventListener {
             if (redisTokenInfo.isPresent()) {
                 RedisTokenInfo newRedisTokenInfo = redisTokenInfo.get();
                 newRedisTokenInfo.setRole(event.getAccount().getRole());
-                newRedisTokenInfo.setPositions(event.getAccount().getAccountPositions().stream()
-                        .map(ap -> ap.getPosition().getId()).collect(Collectors.toList()));
                 redisTokenRepository.save(newRedisTokenInfo);
             }
             log.info("Redis sent for: {}", event.getAccount().getUsername());

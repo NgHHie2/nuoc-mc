@@ -10,7 +10,9 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
@@ -50,7 +52,10 @@ import com.example.learnservice.dto.SemesterResponse;
 import com.example.learnservice.dto.SemesterSearchDTO;
 import com.example.learnservice.dto.SemesterTeacherRequest;
 import com.example.learnservice.model.Document;
+import com.example.learnservice.model.Position;
 import com.example.learnservice.model.Semester;
+import com.example.learnservice.model.SemesterAccount;
+import com.example.learnservice.model.SemesterDocument;
 import com.example.learnservice.service.DocumentService;
 import com.example.learnservice.service.SemesterService;
 
@@ -74,8 +79,32 @@ public class SemesterController {
      * Lấy thông tin chi tiết của một semester
      */
     @GetMapping("/{semesterId}")
-    public ResponseEntity<Semester> getSemesterById(@PathVariable Long semesterId) {
+    @RequireRole({ Role.ADMIN, Role.TEACHER, Role.STUDENT })
+    public ResponseEntity<Semester> getSemesterById(@PathVariable Long semesterId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        Position position = null;
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
+        else if (userRole.equals(Role.STUDENT)) {
+            Optional<SemesterAccount> saOpt = semesterService.checkSemesterAccessWithStudent(semesterId, userId);
+            if (saOpt.isEmpty())
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a student in this course!");
+            position = saOpt.get().getPosition();
+        }
+
         Semester semester = semesterService.getSemesterById(semesterId);
+        if (userRole.equals(Role.STUDENT) && position != null) {
+            Position pos = position;
+            List<SemesterDocument> filteredDocs = semester.getSemesterDocuments().stream()
+                    .filter(sd -> sd.getDocument().getCatalogs().stream()
+                            .anyMatch(catalog -> catalog.getPosition().getId().equals(pos.getId())))
+                    .toList();
+
+            semester.setSemesterDocuments(filteredDocs);
+        }
         return ResponseEntity.ok(semester);
 
     }
@@ -94,6 +123,7 @@ public class SemesterController {
      * - Page<SemesterDetailDTO>: Danh sách semester phân trang với metadata
      */
     @GetMapping("/search")
+    @RequireRole({ Role.ADMIN, Role.TEACHER, Role.STUDENT })
     public Page<SemesterDetailDTO> searchSemesters(
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "startYear", required = false) Integer startYear,

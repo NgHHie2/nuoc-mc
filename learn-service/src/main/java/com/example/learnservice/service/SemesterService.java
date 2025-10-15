@@ -44,6 +44,7 @@ import com.example.learnservice.repository.SemesterDocumentRepository;
 import com.example.learnservice.repository.SemesterRepository;
 import com.example.learnservice.repository.SemesterTeacherRepository;
 import com.example.learnservice.specification.SemesterSpecification;
+import com.example.learnservice.util.ValidateUtil;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -80,6 +81,8 @@ public class SemesterService {
      */
     public Page<SemesterDetailDTO> universalSearch(SemesterSearchDTO searchDTO, Pageable pageable, Long userId,
             Role userRole) {
+        searchDTO.setKeyword(ValidateUtil.validateKeyword(searchDTO.getKeyword()));
+        searchDTO.setSearchFields(ValidateUtil.validateSearchFields(searchDTO.getSearchFields()));
         Sort sort = pageable.getSort().and(Sort.by(Sort.Direction.DESC, "createdAt"));
         pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
         Specification<Semester> spec = SemesterSpecification.build(searchDTO);
@@ -197,16 +200,11 @@ public class SemesterService {
      */
     @Transactional
     public void removeTeacherFromSemester(Long semesterId, Long teacherId, Long userId) {
-        Semester semester = getSemesterById(semesterId);
+        int deletedCount = semesterTeacherRepository.deleteBySemesterIdAndTeacherId(semesterId, teacherId);
 
-        SemesterTeacher toRemove = semester.getSemesterTeachers().stream()
-                .filter(st -> st.getTeacherId().equals(teacherId))
-                .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Teacher not found in semester"));
-
-        semesterTeacherRepository.delete(toRemove);
-        semester.getSemesterTeachers().remove(toRemove);
+        if (deletedCount == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Teacher not found in semester");
+        }
 
         log.info("Removed teacher {} from semester {} by user {}", teacherId, semesterId, userId);
     }
@@ -347,7 +345,7 @@ public class SemesterService {
                 .collect(Collectors.toList());
 
         if (newAssignments.isEmpty())
-            return;
+            throw new IllegalArgumentException("No new students");
 
         // Get positions in one query
         List<Long> positionIds = newAssignments.stream()
@@ -369,7 +367,7 @@ public class SemesterService {
                 }).collect(Collectors.toList());
 
         semesterAccountRepository.saveAll(newSemesterAccounts);
-        log.info("Added {} accounts to semester {}", newAssignments.size(), semesterId);
+        log.info("Added {} students to semester {}", newAssignments.size(), semesterId);
     }
 
     @Transactional
@@ -385,6 +383,14 @@ public class SemesterService {
         List<AccountDTO> validAccs = validateTeacherAccounts(accountIds);
         if (validAccs.isEmpty() || validAccs.size() == 0)
             throw new IllegalArgumentException("Account is not teacher");
+
+        List<Long> currentTeacherIds = semester.getSemesterTeachers().stream().map(SemesterTeacher::getTeacherId)
+                .toList();
+        List<Long> newTeacherIds = validAccs.stream().map(AccountDTO::getId)
+                .filter(id -> !currentTeacherIds.contains(id)).toList();
+
+        if (newTeacherIds.isEmpty())
+            throw new IllegalArgumentException("No new teachers");
 
         // Create new assignments
         List<SemesterTeacher> newSemesterTeachers = validAccs.stream()
@@ -472,10 +478,17 @@ public class SemesterService {
     }
 
     /**
-     * Kiểm tra account có quyền truy cập semester không
+     * Kiểm tra teacher có quyền truy cập semester không
      */
     public boolean checkSemesterAccessWithTeacher(Long semesterId, Long accountId) {
         return semesterTeacherRepository.existsBySemesterIdAndTeacherId(semesterId, accountId);
+    }
+
+    /**
+     * Kiểm tra student có quyền truy cập semester không
+     */
+    public Optional<SemesterAccount> checkSemesterAccessWithStudent(Long semesterId, Long accountId) {
+        return semesterAccountRepository.findBySemesterIdAndAccountId(semesterId, accountId);
     }
 
     /**
