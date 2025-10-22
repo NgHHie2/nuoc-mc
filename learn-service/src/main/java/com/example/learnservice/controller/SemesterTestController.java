@@ -22,6 +22,7 @@ import com.example.learnservice.annotation.RequireRole;
 import com.example.learnservice.client.AccountClient;
 import com.example.learnservice.dto.AccountDTO;
 import com.example.learnservice.dto.ApiResponse;
+import com.example.learnservice.dto.EndTestResponse;
 import com.example.learnservice.dto.QuestionResponse;
 import com.example.learnservice.dto.ResultDetailDTO;
 import com.example.learnservice.dto.ResultSummaryDTO;
@@ -62,6 +63,12 @@ public class SemesterTestController {
             @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
             @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
 
+        Long studentId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.STUDENT)) {
+            SemesterTest semesterTest = semesterTestService.validateAccessTest(semesterTestId, studentId);
+            return ResponseEntity.ok(semesterTest);
+        }
         SemesterTest semesterTest = semesterTestService.getSemesterTestById(semesterTestId);
         return ResponseEntity.ok(semesterTest);
     }
@@ -73,19 +80,48 @@ public class SemesterTestController {
     @RequireRole({ Role.ADMIN, Role.TEACHER, Role.STUDENT })
     public ResponseEntity<StartTestResponse> startTest(
             @PathVariable Long semesterTestId,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
 
         Long studentId = Long.valueOf(userIdStr);
-        Result result = semesterTestService.startTest(semesterTestId, studentId);
+        Role userRole = Role.valueOf(userRoleStr);
+        Result result = semesterTestService.startTest(semesterTestId, studentId, userRole);
 
         // Map sang DTO
         StartTestResponse response = new StartTestResponse();
         response.setSuccess(true);
         response.setResultId(result.getId());
         response.setMessage("Started test successfully");
-        response.setTotalQuestions(((ArrayNode) result.getDetailTest().get("questions")).size());
+        // response.setTotalQuestions(((ArrayNode)
+        // result.getDetailTest().get("questions")).size());
 
         log.info("Student {} started test {} with result {}", studentId, semesterTestId, result.getId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Kết thúc bài thi - Chấm điểm
+     */
+    @PostMapping("/test/{resultId}/end")
+    @RequireRole({ Role.ADMIN, Role.TEACHER, Role.STUDENT })
+    public ResponseEntity<EndTestResponse> endTest(
+            @PathVariable Long resultId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+
+        Long studentId = Long.valueOf(userIdStr);
+        Float score = semesterTestService.endTest(resultId, studentId);
+
+        // Map sang DTO
+        EndTestResponse response = new EndTestResponse();
+        response.setSuccess(true);
+        response.setResultId(resultId);
+        response.setScore(score);
+        response.setMessage("Ended test successfully");
+        // response.setTotalQuestions(((ArrayNode)
+        // result.getDetailTest().get("questions")).size());
+
+        log.info("Student {} ended test with result {}", studentId, resultId);
 
         return ResponseEntity.ok(response);
     }
@@ -94,8 +130,6 @@ public class SemesterTestController {
      * Lấy thông tin 1 câu hỏi cụ thể
      * Query: detail_test->'questions'->:index, student_answers->':index'
      * 
-     * @throws JsonProcessingException
-     * @throws JsonMappingException
      */
     @GetMapping("/test/result/{resultId}/question/{questionIndex}")
     @RequireRole({ Role.ADMIN, Role.TEACHER, Role.STUDENT })
@@ -251,7 +285,7 @@ public class SemesterTestController {
 
         // Kiểm tra quyền: STUDENT chỉ xem được result của mình
         if (userRole == Role.STUDENT) {
-            semesterTestService.validateStudentAccess(result, userId);
+            semesterTestService.validateStudentAccessLight(result.getId(), userId);
         }
 
         // Map sang DTO
@@ -263,6 +297,7 @@ public class SemesterTestController {
         dto.setScore(result.getScore());
         dto.setDetailTest(result.getDetailTest());
         dto.setStudentAnswers(result.getStudentAnswers());
+        dto.setMinutes(result.getSemesterTest().getMinutes());
 
         // Chỉ hiển thị trueAnswers cho ADMIN/TEACHER hoặc sau khi STUDENT đã submit
         if (userRole == Role.ADMIN || userRole == Role.TEACHER

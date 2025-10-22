@@ -11,6 +11,9 @@ import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 
 import javax.crypto.SecretKey;
+
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -73,5 +76,37 @@ public class JwtUtil {
                 .getPayload();
         return claims.getId();
     }
+
+    public String extractDomain(String url) {
+        if (url == null || url.isEmpty()) {
+            return null;
+        }
+
+        try {
+            // Nếu người dùng truyền thiếu http/https thì thêm tạm
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                url = "http://" + url;
+            }
+
+            URI uri = new URI(url);
+            String host = uri.getHost();
+
+            if (host == null) {
+                return null;
+            }
+
+            // Bỏ "www." nếu có
+            if (host.startsWith("www.")) {
+                host = host.substring(4);
+            }
+
+            return host;
+
+        } catch (URISyntaxException e) {
+            System.err.println("Invalid URL format: " + url);
+            return null;
+        }
+    }
+
 
 }

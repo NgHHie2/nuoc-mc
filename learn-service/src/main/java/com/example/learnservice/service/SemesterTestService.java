@@ -1,7 +1,11 @@
 package com.example.learnservice.service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -9,18 +13,27 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.learnservice.enums.Role;
 import com.example.learnservice.model.Answer;
 import com.example.learnservice.model.Question;
 import com.example.learnservice.model.Result;
+import com.example.learnservice.model.SemesterAccount;
 import com.example.learnservice.model.SemesterTest;
+import com.example.learnservice.model.Test;
 import com.example.learnservice.model.TestQuestion;
+import com.example.learnservice.repository.QuestionRepository;
 import com.example.learnservice.repository.ResultRepository;
+import com.example.learnservice.repository.SemesterAccountRepository;
 import com.example.learnservice.repository.SemeterTestRepository;
+import com.example.learnservice.repository.TestRepository;
+import com.example.learnservice.util.ValidateUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.ws.rs.ForbiddenException;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -30,7 +43,16 @@ public class SemesterTestService {
     private SemeterTestRepository semesterTestRepository;
 
     @Autowired
+    private SemesterAccountRepository semesterAccountRepository;
+
+    @Autowired
     private ResultRepository resultRepository;
+
+    @Autowired
+    private TestRepository testRepository;
+
+    @Autowired
+    private QuestionRepository questionRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -48,7 +70,9 @@ public class SemesterTestService {
      * Bắt đầu làm bài thi - Tạo Result
      */
     @Transactional
-    public Result startTest(Long semesterTestId, Long studentId) {
+    public Result startTest(Long semesterTestId, Long studentId, Role role) {
+        if (role.equals(Role.STUDENT))
+            validateAccessTest(semesterTestId, studentId);
         SemesterTest semesterTest = getSemesterTestById(semesterTestId);
 
         // Kiểm tra thời gian thi
@@ -77,6 +101,56 @@ public class SemesterTestService {
         return resultRepository.save(result);
     }
 
+    /*
+     * Kết thúc một bài thi - chấm điểm
+     */
+    @Transactional
+    public Float endTest(Long resultId, Long studentId) {
+        Result result = getResultById(resultId);
+        if (!result.getStudentId().equals(studentId))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not the summitter of this result!");
+        SemesterTest semesterTest = result.getSemesterTest();
+
+        // Kiểm tra thời gian thi
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(semesterTest.getStartDate())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Test has not started yet");
+        }
+        if (now.isAfter(semesterTest.getEndDate())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Test has ended");
+        }
+
+        result.setSubmitDateTime(now);
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode trueAnswerJson = result.getTrueAnswers();
+            JsonNode studentAnswerJson = result.getStudentAnswers();
+
+            Iterator<String> fieldNames = trueAnswerJson.fieldNames();
+            result.setScore((float) 0);
+            while (fieldNames.hasNext()) {
+                String index = fieldNames.next();
+
+                List<Integer> trueAnswers = mapper.convertValue(trueAnswerJson.get(index),
+                        mapper.getTypeFactory().constructCollectionType(List.class, Integer.class));
+
+                JsonNode selectedAnswersNode = studentAnswerJson.get(index).get("selectedAnswers");
+                List<Integer> selectedAnswers = mapper.convertValue(selectedAnswersNode,
+                        mapper.getTypeFactory().constructCollectionType(List.class, Integer.class));
+
+                boolean isSame = ValidateUtil.isSameList(trueAnswers, selectedAnswers);
+                if (isSame)
+                    result.setScore(result.getScore() + 1);
+            }
+            return result.getScore();
+        } catch (Exception e) {
+            log.error("Error while scoring" + e.getMessage());
+        }
+
+        return null;
+    }
+
     /**
      * Lấy Result theo ID (full)
      */
@@ -86,7 +160,7 @@ public class SemesterTestService {
     }
 
     /**
-     * Lấy 1 câu hỏi cụ thể bằng JSONB operator (siêu tối ưu)
+     * Lấy 1 câu hỏi cụ thể bằng JSONB operator
      * Query: detail_test->'questions'->0, student_answers->'0'
      */
     public Object[] getQuestionByIndex(Long resultId, Integer questionIndex, Long userId) {
@@ -99,7 +173,7 @@ public class SemesterTestService {
     }
 
     /**
-     * Chọn đáp án cho câu hỏi (siêu tối ưu với jsonb_set)
+     * Chọn đáp án cho câu hỏi
      * UPDATE: jsonb_set(student_answers, '{0,selectedAnswers}', '[1,2]')
      */
     @Transactional
@@ -137,7 +211,7 @@ public class SemesterTestService {
     }
 
     /**
-     * Đánh flag câu hỏi (siêu tối ưu với jsonb_set)
+     * Đánh flag câu hỏi
      * UPDATE: jsonb_set(student_answers, '{0,flagged}', 'true')
      */
     @Transactional
@@ -204,15 +278,6 @@ public class SemesterTestService {
     }
 
     /**
-     * Kiểm tra quyền truy cập Result cho Student (full object)
-     */
-    public void validateStudentAccess(Result result, Long studentId) {
-        if (!result.getStudentId().equals(studentId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
-    }
-
-    /**
      * Xây dựng detailTest từ SemesterTest (dùng index thay vì ID)
      */
     private JsonNode buildDetailTest(SemesterTest semesterTest) {
@@ -226,7 +291,17 @@ public class SemesterTestService {
         ArrayNode questionsArray = objectMapper.createArrayNode();
 
         int questionIndex = 0;
-        for (TestQuestion tq : semesterTest.getTest().getTestQuestions()) {
+        Test test = testRepository.findWithQuestionsById(semesterTest.getTest().getId())
+                .orElseThrow(() -> new EntityNotFoundException("Test not found"));
+        List<Long> questionIds = test.getTestQuestions().stream()
+                .map(tq -> tq.getQuestion().getId())
+                .distinct()
+                .toList();
+
+        if (!questionIds.isEmpty())
+            questionRepository.findAllWithAnswers(questionIds);
+        // Test test = semesterTest.getTest();
+        for (TestQuestion tq : test.getTestQuestions()) {
             Question question = tq.getQuestion();
             ObjectNode questionNode = objectMapper.createObjectNode();
             questionNode.put("questionIndex", questionIndex);
@@ -296,4 +371,17 @@ public class SemesterTestService {
 
         return studentAnswers;
     }
+
+    public SemesterTest validateAccessTest(Long semesterTestId, Long studentId) {
+        SemesterTest semesterTest = semesterTestRepository.findById(semesterTestId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Test not found"));
+        SemesterAccount semesterAccount = semesterAccountRepository
+                .findBySemesterIdAndAccountId(semesterTest.getSemester().getId(), studentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"));
+        if (!semesterTest.getTest().getPosition().getId().equals(semesterAccount.getPosition().getId())) {
+            new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return semesterTest;
+    }
+
 }

@@ -30,6 +30,7 @@ public class SemesterTest {
     private LocalDateTime startDate;
     private LocalDateTime endDate;
     private String name;
+    private Integer minutes;
 
     @JsonIgnore
     @ManyToOne
@@ -39,10 +40,6 @@ public class SemesterTest {
     @ManyToOne
     @JoinColumn(name = "test_id")
     private Test test;
-
-    @ManyToOne
-    @JoinColumn(name = "position_id")
-    private Position position;
 
     @JsonIgnore
     @OneToMany(mappedBy = "semesterTest", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)

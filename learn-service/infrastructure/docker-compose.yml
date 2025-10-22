@@ -1,10 +1,10 @@
 services:
-  # Shared Kafka  
+  # Shared Kafka
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: kafka-shared
     ports:
-      - "9092:9092"   # host connect qua localhost:9092
+      - "9092:9092" # host connect qua localhost:9092
       - "29092:29092" # container khác connect qua kafka:29092
     environment:
       KAFKA_NODE_ID: 1
@@ -38,7 +38,7 @@ services:
       - microservice-network
 
   api-gateway:
-    image: nghhie/api-gateway:latest 
+    image: nghhie/api-gateway:latest
     container_name: api-gateway
     ports:
       - "8080:8080"
@@ -70,7 +70,8 @@ services:
       - SPRING_DATASOURCE_PASSWORD=1111
       # Kafka connection cho Docker (nếu có)
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - API_GATEWAT_URL=
+      - API_GATEWAT_URL=http://localhost:8080
+      - HTTPS=false
     depends_on:
       - eureka-server
       - postgres-account
@@ -108,7 +109,6 @@ services:
     networks:
       - microservice-network
 
-
   redis:
     image: redis:7-alpine
     container_name: redis-shared
@@ -120,15 +120,27 @@ services:
     networks:
       - microservice-network
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - microservice-network
+
 volumes:
   kafka_shared_data:
   postgres_account_data:
   postgres_learn_data:
   redis_data:
+  pgadmin_data:
 
 networks:
   microservice-network:
     driver: bridge
     name: microservice-network
-
-    

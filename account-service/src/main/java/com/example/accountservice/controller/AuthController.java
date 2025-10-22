@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -46,6 +47,12 @@ public class AuthController {
     @Autowired
     private HttpServletRequest request;
 
+    @Value("${https.config}")
+    private boolean https;
+
+    @Value("${accountservice.api-gateway-url}")
+    private String apiGatewayUrl;
+
     /**
      * Đăng nhập vào hệ thống
      * Account service sẽ tạo jwt và lưu thông tin cần thiết của account vào redis
@@ -80,10 +87,10 @@ public class AuthController {
             // Set JWT cookie
             Cookie jwtCookie = new Cookie("jwt", token);
             jwtCookie.setHttpOnly(true);
-            jwtCookie.setSecure(false); // true for HTTPS
+            jwtCookie.setSecure(https); // true for HTTPS
             jwtCookie.setPath("/");
             jwtCookie.setMaxAge(24 * 60 * 60); // 24 hours
-            jwtCookie.setAttribute("SameSite", "Lax");
+            jwtCookie.setAttribute("SameSite", https ? "None" : "Lax");
             response.addCookie(jwtCookie);
 
             return ResponseEntity.ok(Map.of(

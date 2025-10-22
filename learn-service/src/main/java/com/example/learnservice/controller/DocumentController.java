@@ -95,6 +95,18 @@ public class DocumentController {
             @PathVariable String fileCode,
             HttpServletRequest request) throws Exception {
 
+        // kiểm tra request đến từ nguồn url nào
+        String referer = request.getHeader("referer");
+        String origin = request.getHeader("origin");
+        String allowed = "http://localhost:3000";
+
+        boolean allowedRequest = (referer != null && referer.startsWith(allowed))
+                || (origin != null && origin.startsWith(allowed));
+
+        if (!allowedRequest) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
         log.info("X-CCCD: " + request.getHeader("X-CCCD"));
         String cccd = request.getHeader("X-CCCD");
         Document document = documentService.getDocumentByCode(fileCode);

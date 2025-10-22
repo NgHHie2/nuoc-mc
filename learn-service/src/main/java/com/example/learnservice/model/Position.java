@@ -43,10 +43,6 @@ public class Position {
 
     @JsonIgnore
     @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<SemesterTest> semesterTests;
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<QuestionPosition> questionPositions;
 
     @JsonIgnore

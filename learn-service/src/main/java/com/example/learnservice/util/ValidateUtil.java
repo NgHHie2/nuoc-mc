@@ -1,5 +1,7 @@
 package com.example.learnservice.util;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -66,4 +68,16 @@ public class ValidateUtil {
                 .collect(Collectors.toList());
     }
 
+    // So sánh 2 list có cùng phần tử, quan tâm lặp, không quan tâm vị trí
+    public static boolean isSameList(List<Integer> a, List<Integer> b) {
+        if (a.size() != b.size())
+            return false;
+
+        List<Integer> aCopy = new ArrayList<>(a);
+        List<Integer> bCopy = new ArrayList<>(b);
+        Collections.sort(aCopy);
+        Collections.sort(bCopy);
+
+        return aCopy.equals(bCopy);
+    }
 }
