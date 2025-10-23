@@ -26,26 +26,24 @@ public class SecurityConfig {
                 .httpBasic(httpBasic -> httpBasic.disable()) // Tắt HTTP Basic auth
                 .logout(logout -> logout.disable()) // Tắt logout endpoint mặc định
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/ws/**").permitAll()
                         .anyRequest().permitAll() // Cho phép tất cả request
                 );
 
         return http.build();
     }
 
-    // @Bean
-    // public CorsConfigurationSource corsConfigurationSource() {
-    // CorsConfiguration configuration = new CorsConfiguration();
-    // configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:*",
-    // "http://127.0.0.1:*"));
-    // configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE",
-    // "OPTIONS", "PATCH"));
-    // configuration.setAllowedHeaders(Arrays.asList("*"));
-    // configuration.setAllowCredentials(true);
-    // configuration.setExposedHeaders(Arrays.asList("Set-Cookie"));
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:*", "http://127.0.0.1:*"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
+        configuration.setExposedHeaders(Arrays.asList("Set-Cookie"));
 
-    // UrlBasedCorsConfigurationSource source = new
-    // UrlBasedCorsConfigurationSource();
-    // source.registerCorsConfiguration("/**", configuration);
-    // return source;
-    // }
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
 }

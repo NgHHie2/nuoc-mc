@@ -42,6 +42,7 @@ public class JwtUtil {
                 .subject(userId.toString()) // Dùng userId làm subject thay vì username
                 .claim("userId", userId)
                 .claim("cccd", account.getCccd())
+                .claim("role", account.getRole())
                 .id(jwtId) // Thêm JWT ID
                 .issuedAt(now)
                 .expiration(expiryDate)
@@ -107,6 +108,5 @@ public class JwtUtil {
             return null;
         }
     }
-
 
 }
