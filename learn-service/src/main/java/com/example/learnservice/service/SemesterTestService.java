@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.learnservice.controller.WebSocketController;
 import com.example.learnservice.enums.Role;
 import com.example.learnservice.model.Answer;
 import com.example.learnservice.model.Question;
@@ -55,6 +56,9 @@ public class SemesterTestService {
     private QuestionRepository questionRepository;
 
     @Autowired
+    private WebSocketController webSocketController;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     /**
@@ -66,6 +70,26 @@ public class SemesterTestService {
                         "SemesterTest not found with id: " + semesterTestId));
     }
 
+    /*
+     * Mở bài thi
+     */
+    @Transactional
+    public void openTest(Long semesterTestId, Long userId, Role role) {
+        // Chỉ ADMIN và TEACHER mới được mở
+        if (role != Role.ADMIN && role != Role.TEACHER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+
+        SemesterTest semesterTest = getSemesterTestById(semesterTestId);
+        semesterTest.setOpen(true);
+        semesterTestRepository.save(semesterTest);
+
+        // Notify all users via WebSocket
+        webSocketController.notifyTestOpened(semesterTestId);
+
+        log.info("Test {} opened by user {}", semesterTestId, userId);
+    }
+
     /**
      * Bắt đầu làm bài thi - Tạo Result
      */
@@ -75,6 +99,10 @@ public class SemesterTestService {
             validateAccessTest(semesterTestId, studentId);
         SemesterTest semesterTest = getSemesterTestById(semesterTestId);
 
+        // Kiểm tra test đã mở chưa
+        if (!semesterTest.getOpen()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Test is not open yet");
+        }
         // Kiểm tra thời gian thi
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(semesterTest.getStartDate())) {
@@ -98,7 +126,13 @@ public class SemesterTestService {
         result.setStudentAnswers(studentAnswers);
         result.setStartDateTime(now);
 
-        return resultRepository.save(result);
+        Result savedResult = resultRepository.save(result);
+
+        // Update WebSocket status to TESTING
+        webSocketController.updateUserStatus(semesterTestId, studentId,
+                WebSocketController.TestStatus.TESTING);
+
+        return savedResult;
     }
 
     /*
@@ -143,6 +177,11 @@ public class SemesterTestService {
                 if (isSame)
                     result.setScore(result.getScore() + 1);
             }
+
+            // Update WebSocket status to SUBMITTED
+            webSocketController.updateUserStatus(semesterTest.getId(), studentId,
+                    WebSocketController.TestStatus.SUBMITTED);
+
             return result.getScore();
         } catch (Exception e) {
             log.error("Error while scoring" + e.getMessage());

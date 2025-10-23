@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -22,38 +21,61 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WebSocketEventListener {
 
     private final SimpMessagingTemplate messagingTemplate;
-    private final Map<Long, Set<WebSocketController.UserInfo>> waitingRooms;
+    private final Map<Long, Set<WebSocketController.UserStatus>> testRooms;
 
     @EventListener
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
-        System.out.println("hiep dep trai");
+        log.info("WebSocket disconnect event received");
+
         StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
 
         Long semesterTestId = (Long) headerAccessor.getSessionAttributes().get("semesterTestId");
         Long userId = (Long) headerAccessor.getSessionAttributes().get("userId");
-        System.out.println(semesterTestId + " " + userId);
+
         if (semesterTestId != null && userId != null) {
+            log.info("User {} disconnecting from test {}", userId, semesterTestId);
+
             // Remove user from room
-            Set<WebSocketController.UserInfo> users = waitingRooms.get(semesterTestId);
+            Set<WebSocketController.UserStatus> users = testRooms.get(semesterTestId);
             if (users != null) {
                 users.removeIf(u -> u.userId().equals(userId));
 
+                // Remove room if empty
                 if (users.isEmpty()) {
-                    waitingRooms.remove(semesterTestId);
+                    testRooms.remove(semesterTestId);
+                    log.info("Test room {} removed (empty)", semesterTestId);
+                } else {
+                    // Broadcast updated list
+                    broadcastUserList(semesterTestId, users);
                 }
 
-                // Broadcast updated list
-                WebSocketController.WaitingRoomUpdate update = new WebSocketController.WaitingRoomUpdate(
-                        semesterTestId,
-                        users,
-                        users.size());
-
-                messagingTemplate.convertAndSend(
-                        "/topic/test/" + semesterTestId + "/users",
-                        update);
-
-                log.info("User {} disconnected from waiting room {}", userId, semesterTestId);
+                log.info("User {} disconnected from test room {}", userId, semesterTestId);
             }
         }
+    }
+
+    private void broadcastUserList(Long semesterTestId, Set<WebSocketController.UserStatus> users) {
+        // Count by status
+        long waitingCount = users.stream()
+                .filter(u -> u.status() == WebSocketController.TestStatus.WAITING)
+                .count();
+        long testingCount = users.stream()
+                .filter(u -> u.status() == WebSocketController.TestStatus.TESTING)
+                .count();
+        long submittedCount = users.stream()
+                .filter(u -> u.status() == WebSocketController.TestStatus.SUBMITTED)
+                .count();
+
+        WebSocketController.TestRoomUpdate update = new WebSocketController.TestRoomUpdate(
+                semesterTestId,
+                users,
+                users.size(),
+                (int) waitingCount,
+                (int) testingCount,
+                (int) submittedCount);
+
+        messagingTemplate.convertAndSend(
+                "/topic/test/" + semesterTestId + "/users",
+                update);
     }
 }

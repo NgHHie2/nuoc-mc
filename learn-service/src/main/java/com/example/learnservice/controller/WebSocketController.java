@@ -4,80 +4,132 @@ package com.example.learnservice.controller;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
-import lombok.Data;
+import com.example.learnservice.repository.ResultRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
 
 @Slf4j
 @Controller
 @RequiredArgsConstructor
 public class WebSocketController {
 
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ResultRepository resultRepository;
 
-    // In-memory storage - KHÔNG CẦN DB
-    // Key: semesterTestId, Value: Set of UserInfo
-    private final Map<Long, Set<UserInfo>> waitingRooms;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final Map<Long, Set<UserStatus>> testRooms;
 
     /**
-     * User join waiting room
+     * User join test room
      */
     @MessageMapping("/test/{semesterTestId}/join")
-    public void joinWaitingRoom(
+    public void joinTestRoom(
             @DestinationVariable Long semesterTestId,
             @Payload UserJoinMessage message,
             SimpMessageHeaderAccessor headerAccessor) {
 
-        UserInfo userInfo = new UserInfo(
+        if (resultRepository.existsBySemesterTestIdAndStudentId(semesterTestId, message.userId))
+            return;
+
+        UserStatus userStatus = new UserStatus(
                 message.userId(),
                 message.fullName(),
-                message.cccd());
+                message.cccd(),
+                TestStatus.WAITING);
 
-        // Store session ID để xử lý disconnect
+        // Store session ID
         headerAccessor.getSessionAttributes().put("semesterTestId", semesterTestId);
         headerAccessor.getSessionAttributes().put("userId", message.userId());
 
-        // Add user to room
-        waitingRooms.computeIfAbsent(semesterTestId, k -> new CopyOnWriteArraySet<>())
-                .add(userInfo);
+        // Add user to room or update if exists
+        Set<UserStatus> users = testRooms.get(semesterTestId);
+        if (users == null) {
+            users = java.util.concurrent.ConcurrentHashMap.newKeySet();
+            testRooms.put(semesterTestId, users);
+        }
 
-        log.info("User {} joined waiting room {}", message.userId(), semesterTestId);
+        // Remove old status if exists
+        users.removeIf(u -> u.userId().equals(message.userId()));
+        // Add new status
+        users.add(userStatus);
 
-        // Broadcast updated list to all users in this room
+        log.info("User {} joined test room {}", message.userId(), semesterTestId);
+
+        // Broadcast updated list
         broadcastUserList(semesterTestId);
     }
 
     /**
-     * User leave waiting room
+     * User leave test room
      */
     @MessageMapping("/test/{semesterTestId}/leave")
-    public void leaveWaitingRoom(
+    public void leaveTestRoom(
             @DestinationVariable Long semesterTestId,
             @Payload UserLeaveMessage message) {
 
-        Set<UserInfo> users = waitingRooms.get(semesterTestId);
+        Set<UserStatus> users = testRooms.get(semesterTestId);
         if (users != null) {
             users.removeIf(u -> u.userId().equals(message.userId()));
 
-            // Remove room if empty
             if (users.isEmpty()) {
-                waitingRooms.remove(semesterTestId);
+                testRooms.remove(semesterTestId);
             }
         }
 
-        log.info("User {} left waiting room {}", message.userId(), semesterTestId);
+        log.info("User {} left test room {}", message.userId(), semesterTestId);
+        broadcastUserList(semesterTestId);
+    }
 
-        // Broadcast updated list
+    /**
+     * Update user status (called from service when starting/ending test)
+     */
+    public void updateUserStatus(Long semesterTestId, Long userId, TestStatus status) {
+        Set<UserStatus> users = testRooms.get(semesterTestId);
+        if (users != null) {
+            // Find and update user status
+            UserStatus oldStatus = users.stream()
+                    .filter(u -> u.userId().equals(userId))
+                    .findFirst()
+                    .orElse(null);
+
+            if (oldStatus != null) {
+                users.remove(oldStatus);
+                users.add(new UserStatus(
+                        oldStatus.userId(),
+                        oldStatus.fullName(),
+                        oldStatus.cccd(),
+                        status));
+
+                log.info("User {} status updated to {} in test {}", userId, status, semesterTestId);
+                broadcastUserList(semesterTestId);
+            }
+        }
+    }
+
+    /**
+     * Notify all users when test is opened
+     */
+    public void notifyTestOpened(Long semesterTestId) {
+        TestOpenedEvent event = new TestOpenedEvent(semesterTestId, true);
+        messagingTemplate.convertAndSend(
+                "/topic/test/" + semesterTestId + "/opened",
+                event);
+        log.info("Test {} opened notification sent", semesterTestId);
+    }
+
+    @MessageMapping("/test/{semesterTestId}/request-state")
+    public void requestRoomState(
+            @DestinationVariable Long semesterTestId,
+            @Payload UserJoinMessage message) {
+        log.info("User {} requested room state for test {}", message.userId(), semesterTestId);
         broadcastUserList(semesterTestId);
     }
 
@@ -85,12 +137,30 @@ public class WebSocketController {
      * Broadcast current user list to all users in room
      */
     private void broadcastUserList(Long semesterTestId) {
-        Set<UserInfo> users = waitingRooms.get(semesterTestId);
+        Set<UserStatus> users = testRooms.get(semesterTestId);
 
-        WaitingRoomUpdate update = new WaitingRoomUpdate(
+        if (users == null || users.isEmpty()) {
+            users = Collections.emptySet();
+        }
+
+        // Count by status
+        long waitingCount = users.stream()
+                .filter(u -> u.status() == TestStatus.WAITING)
+                .count();
+        long testingCount = users.stream()
+                .filter(u -> u.status() == TestStatus.TESTING)
+                .count();
+        long submittedCount = users.stream()
+                .filter(u -> u.status() == TestStatus.SUBMITTED)
+                .count();
+
+        TestRoomUpdate update = new TestRoomUpdate(
                 semesterTestId,
-                users != null ? users : Set.of(),
-                users != null ? users.size() : 0);
+                users,
+                users.size(),
+                (int) waitingCount,
+                (int) testingCount,
+                (int) submittedCount);
 
         messagingTemplate.convertAndSend(
                 "/topic/test/" + semesterTestId + "/users",
@@ -104,14 +174,14 @@ public class WebSocketController {
     public record UserLeaveMessage(Long userId) {
     }
 
-    public record UserInfo(Long userId, String fullName, String cccd) {
+    public record UserStatus(Long userId, String fullName, String cccd, TestStatus status) {
         @Override
         public boolean equals(Object o) {
             if (this == o)
                 return true;
-            if (!(o instanceof UserInfo))
+            if (!(o instanceof UserStatus))
                 return false;
-            return userId.equals(((UserInfo) o).userId);
+            return userId.equals(((UserStatus) o).userId);
         }
 
         @Override
@@ -120,9 +190,21 @@ public class WebSocketController {
         }
     }
 
-    public record WaitingRoomUpdate(
+    public record TestRoomUpdate(
             Long semesterTestId,
-            Set<UserInfo> users,
-            int totalUsers) {
+            Set<UserStatus> users,
+            int totalUsers,
+            int waitingCount,
+            int testingCount,
+            int submittedCount) {
+    }
+
+    public record TestOpenedEvent(Long semesterTestId, boolean opened) {
+    }
+
+    public enum TestStatus {
+        WAITING, // Đang chờ
+        TESTING, // Đang thi
+        SUBMITTED // Đã nộp
     }
 }

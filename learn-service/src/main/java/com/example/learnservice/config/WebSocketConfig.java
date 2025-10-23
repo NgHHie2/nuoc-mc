@@ -33,7 +33,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     @Bean
-    public Map<Long, Set<WebSocketController.UserInfo>> waitingRooms() {
+    public Map<Long, Set<WebSocketController.UserStatus>> waitingRooms() {
         return new ConcurrentHashMap<>();
     }
 }

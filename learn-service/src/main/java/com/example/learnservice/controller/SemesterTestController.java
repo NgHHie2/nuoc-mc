@@ -74,6 +74,30 @@ public class SemesterTestController {
     }
 
     /**
+     * Mở bài thi - chỉ ADMIN và TEACHER
+     */
+    @PostMapping("/test/{semesterTestId}/open")
+    @RequireRole({ Role.ADMIN, Role.TEACHER })
+    public ResponseEntity<ApiResponse> openTest(
+            @PathVariable Long semesterTestId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+
+        semesterTestService.openTest(semesterTestId, userId, userRole);
+
+        ApiResponse response = new ApiResponse();
+        response.setSuccess(true);
+        response.setMessage("Test opened successfully");
+
+        log.info("User {} opened test {}", userId, semesterTestId);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Bắt đầu làm bài thi - Tạo Result
      */
     @PostMapping("/test/{semesterTestId}/start")

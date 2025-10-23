@@ -34,6 +34,7 @@ public class SemesterTest {
     private LocalDateTime endDate;
     private String name;
     private Integer minutes;
+    private Boolean open;
 
     @Enumerated(EnumType.STRING)
     private TestType type;
