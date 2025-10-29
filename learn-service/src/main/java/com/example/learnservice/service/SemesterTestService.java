@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -14,10 +15,19 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.example.learnservice.controller.WebSocketController;
+import com.example.learnservice.dto.ResultStatusProjection;
+import com.example.learnservice.dto.SubmittedStudent;
+import com.example.learnservice.dto.SemesterResponse;
+import com.example.learnservice.dto.SemesterTestAssignRequest;
+import com.example.learnservice.dto.SemesterTestUpdateRequest;
+import com.example.learnservice.dto.SemesterTestCreateRequest;
 import com.example.learnservice.enums.Role;
+import com.example.learnservice.enums.TestType;
 import com.example.learnservice.model.Answer;
+import com.example.learnservice.model.Position;
 import com.example.learnservice.model.Question;
 import com.example.learnservice.model.Result;
+import com.example.learnservice.model.Semester;
 import com.example.learnservice.model.SemesterAccount;
 import com.example.learnservice.model.SemesterTest;
 import com.example.learnservice.model.Test;
@@ -25,6 +35,7 @@ import com.example.learnservice.model.TestQuestion;
 import com.example.learnservice.repository.QuestionRepository;
 import com.example.learnservice.repository.ResultRepository;
 import com.example.learnservice.repository.SemesterAccountRepository;
+import com.example.learnservice.repository.SemesterRepository;
 import com.example.learnservice.repository.SemeterTestRepository;
 import com.example.learnservice.repository.TestRepository;
 import com.example.learnservice.util.ValidateUtil;
@@ -59,6 +70,12 @@ public class SemesterTestService {
     private WebSocketController webSocketController;
 
     @Autowired
+    private SemesterRepository semesterRepository;
+
+    @Autowired
+    private PositionService positionService;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     /**
@@ -68,6 +85,13 @@ public class SemesterTestService {
         return semesterTestRepository.findById(semesterTestId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "SemesterTest not found with id: " + semesterTestId));
+    }
+
+    /*
+     * Lấy danh sách bài thi exam
+     */
+    public List<SemesterTest> getExamTests(Long semesterId) {
+        return semesterTestRepository.findAllBySemesterIdAndType(semesterId, TestType.EXAM);
     }
 
     /*
@@ -90,8 +114,32 @@ public class SemesterTestService {
         log.info("Test {} opened by user {}", semesterTestId, userId);
     }
 
+    /*
+     * Check test status
+     */
+    public Optional<ResultStatusProjection> getTestStatus(Long semesterTestId, Long studentId) {
+        return resultRepository.findFirstBySemesterTestIdAndStudentIdOrderByCreatedAtDesc(
+                semesterTestId, studentId);
+    }
+
+    public List<SubmittedStudent> getListSubmittedStudents(Long semesterTestId) {
+        List<ResultStatusProjection> result = resultRepository.findAllBySemesterTestId(semesterTestId);
+        List<SubmittedStudent> submittedStudents = result.stream()
+                .filter(r -> r.getSubmitDateTime() != null)
+                .map(r -> SubmittedStudent.builder()
+                        .userId(r.getStudentId())
+                        .score(r.getScore())
+                        .resultId(r.getId())
+                        .build())
+                .toList();
+        ;
+
+        return submittedStudents;
+    }
+
     /**
      * Bắt đầu làm bài thi - Tạo Result
+     * Nếu là EXAM và đã có result thì trả về result hiện tại
      */
     @Transactional
     public Result startTest(Long semesterTestId, Long studentId, Role role) {
@@ -103,6 +151,7 @@ public class SemesterTestService {
         if (!semesterTest.getOpen()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Test is not open yet");
         }
+
         // Kiểm tra thời gian thi
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(semesterTest.getStartDate())) {
@@ -110,6 +159,30 @@ public class SemesterTestService {
         }
         if (now.isAfter(semesterTest.getEndDate())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Test has ended");
+        }
+
+        // Nếu là EXAM, check xem đã có result chưa
+        if (semesterTest.getType() == TestType.EXAM) {
+            Optional<ResultStatusProjection> existingResult = resultRepository
+                    .findFirstBySemesterTestIdAndStudentIdOrderByCreatedAtDesc(semesterTestId, studentId);
+
+            if (existingResult.isPresent()) {
+                ResultStatusProjection result = existingResult.get();
+
+                // Nếu đã submit rồi thì không cho vào lại
+                if (result.getSubmitDateTime() != null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "You have already submitted this exam");
+                }
+                webSocketController.updateUserStatus(semesterTestId, studentId,
+                        WebSocketController.TestStatus.TESTING);
+                Result tempResult = new Result();
+                tempResult.setId(result.getId());
+                // Trả về result hiện tại để tiếp tục thi
+                log.info("Student {} continuing exam {} with existing result {}",
+                        studentId, semesterTestId, result.getId());
+                return tempResult;
+            }
         }
 
         // Tạo detailTest từ Test hiện tại
@@ -131,6 +204,9 @@ public class SemesterTestService {
         // Update WebSocket status to TESTING
         webSocketController.updateUserStatus(semesterTestId, studentId,
                 WebSocketController.TestStatus.TESTING);
+
+        log.info("Student {} started test {} with new result {}",
+                studentId, semesterTestId, savedResult.getId());
 
         return savedResult;
     }
@@ -179,8 +255,7 @@ public class SemesterTestService {
             }
 
             // Update WebSocket status to SUBMITTED
-            webSocketController.updateUserStatus(semesterTest.getId(), studentId,
-                    WebSocketController.TestStatus.SUBMITTED);
+            webSocketController.notifyTestSubmitted(semesterTest.getId(), resultId, studentId, result.getScore());
 
             return result.getScore();
         } catch (Exception e) {
@@ -243,6 +318,18 @@ public class SemesterTestService {
             if (updated == 0) {
                 throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to update answer");
             }
+
+            // Build JSONB path for timestamp: {0, answeredAt}
+            String pathTimestamp = String.format("{\"%d\",\"answeredAt\"}", questionIndex);
+
+            // Get current timestamp in ISO format
+            String timestamp = String.format("\"%s\"", LocalDateTime.now().toString());
+
+            // Update timestamp
+            resultRepository.updateStudentAnswerPath(resultId, pathTimestamp, timestamp);
+
+            log.info("Student {} selected answers {} for question {} at {}",
+                    userId, answerIndices, questionIndex, timestamp);
         } catch (Exception e) {
             log.error("Error updating student answers", e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to update answer");
@@ -403,6 +490,7 @@ public class SemesterTestService {
             ObjectNode answerNode = objectMapper.createObjectNode();
             answerNode.set("selectedAnswers", objectMapper.createArrayNode());
             answerNode.put("flagged", false);
+            answerNode.putNull("answeredAt");
 
             studentAnswers.set(String.valueOf(questionIndex), answerNode);
             questionIndex++;
@@ -418,9 +506,146 @@ public class SemesterTestService {
                 .findBySemesterIdAndAccountId(semesterTest.getSemester().getId(), studentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"));
         if (!semesterTest.getTest().getPosition().getId().equals(semesterAccount.getPosition().getId())) {
-            new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return semesterTest;
     }
 
+    /*
+     * Tạo bài kiểm tra mới trong kỳ học
+     */
+    public Test createTest(Long semesterId, SemesterTestCreateRequest request, Long userId) {
+        // Create new Test
+        Test test = new Test();
+        test.setName(request.getTestName());
+        test.setCreatedBy(userId);
+        test.setUpdatedBy(userId);
+        Position position = positionService.getPositionById(request.getPositionId());
+        test.setPosition(position);
+
+        Semester semester = semesterRepository.findById(semesterId)
+                .orElseThrow(() -> new RuntimeException("Semester not found with id: " + semesterId));
+
+        Test savedTest = testRepository.save(test);
+
+        SemesterTest semesterTest = new SemesterTest();
+        semesterTest.setName(request.getTestName());
+        semesterTest.setStartDate(request.getStartDate());
+        semesterTest.setEndDate(request.getEndDate());
+        semesterTest.setType(request.getType());
+        semesterTest.setMinutes(request.getMinutes());
+        semesterTest.setSemester(semester);
+        semesterTest.setTest(savedTest);
+        semesterTest.setCreatedBy(userId);
+        semesterTestRepository.save(semesterTest);
+
+        return savedTest;
+    }
+
+    /*
+     * Lấy tất cả bài kiểm tra trong kỳ học
+     */
+    public List<SemesterTest> getAllTestsInSemester(Long semesterId) {
+        return semesterTestRepository.findAllBySemesterId(semesterId);
+    }
+
+    /*
+     * Xóa bài kiểm tra khỏi kỳ học
+     */
+    public void deleteTestFromSemester(Long semesterId, Long testId) {
+        Optional<SemesterTest> semesterTest = semesterTestRepository.findBySemesterIdAndTestId(semesterId, testId);
+        if (semesterTest.isEmpty()) {
+            throw new RuntimeException("Test with id " + testId + " not found in semester with id " + semesterId);
+        }
+
+        semesterTestRepository.delete(semesterTest.get());
+    }
+
+    /*
+     * Lấy tất cả bài kiểm tra có position phù hợp mà chưa được thêm vào trong kỳ
+     * học
+     */
+    public List<Test> getAvailableTestsWithPosition(Long semesterId, Long positionId) {
+        List<Test> testsInSemester = getAllTestsInSemester(semesterId).stream().map(SemesterTest::getTest).toList();
+        List<Long> testsIdInSemester = testsInSemester.stream().map(Test::getId).toList();
+        if (testsIdInSemester.isEmpty()) {
+            return testRepository.findAllByPositionId(positionId);
+        }
+        return testRepository.findAllByPositionId(positionId).stream()
+                .filter(test -> !testsIdInSemester.contains(test.getId())).toList();
+    }
+
+    /*
+     * Cập nhật thông tin SemesterTest
+     */
+    public SemesterTest updateSemesterTestInfo(Long semesterId, Long testId, Long userId,
+            SemesterTestUpdateRequest request) {
+        SemesterTest semesterTest = semesterTestRepository.findBySemesterIdAndTestId(semesterId, testId)
+                .orElseThrow(() -> new RuntimeException("SemesterTest not found"));
+        semesterTest.setName(request.getName());
+        semesterTest.setStartDate(request.getStartDate());
+        semesterTest.setEndDate(request.getEndDate());
+        semesterTest.setMinutes(request.getMinutes());
+        semesterTest.setUpdatedBy(userId);
+        semesterTestRepository.save(semesterTest);
+        return semesterTest;
+    }
+
+    /*
+     * Lấy ra danh sách các Semester sử dụng 1 Test (Không tính semester đang sử
+     * dụng)
+     */
+    public List<SemesterResponse> getSemestersUsingTest(Long testId, Long semesterId) {
+        List<SemesterTest> semesterTests = semesterTestRepository.findAllByTestId(testId);
+        Semester semester = semesterRepository.findById(semesterId)
+                .orElseThrow(() -> new RuntimeException("Semester not found with id: " + semesterId));
+
+        List<SemesterResponse> semesterResponses = semesterTests.stream()
+                .map(SemesterTest::getSemester)
+                .filter(s -> !s.getId().equals(semesterId))
+                .map(s -> SemesterResponse.builder()
+                        .id(s.getId())
+                        .semesterName(s.getName())
+                        .startDate(s.getStartDate())
+                        .endDate(s.getEndDate())
+                        .build())
+                .toList();
+        return semesterResponses;
+    }
+
+    /*
+     * Lấy thông tin 1 bài kiểm tra trong kỳ học
+     */
+    public SemesterTest getTestInSemester(Long semesterId, Long testId) {
+        return semesterTestRepository.findBySemesterIdAndTestId(semesterId, testId)
+                .orElseThrow(() -> new RuntimeException("SemesterTest not found"));
+    }
+
+    /*
+     * Gán bài kiểm tra vào kỳ học
+     */
+    public String assignTestToSemester(Long semesterId, Long testId, Long userId, SemesterTestAssignRequest request) {
+        Semester semester = semesterRepository.findById(semesterId)
+                .orElseThrow(() -> new RuntimeException("Semester not found with id: " + semesterId));
+        Test test = testRepository.findById(testId)
+                .orElseThrow(() -> new RuntimeException("Test not found with id: " + testId));
+        // Kiểm tra xem bài kiểm tra đã được gán vào kỳ học chưa
+        Optional<SemesterTest> existingSemesterTest = semesterTestRepository.findBySemesterIdAndTestId(semesterId,
+                testId);
+        if (existingSemesterTest.isPresent()) {
+            throw new RuntimeException(
+                    "Test with id " + testId + " is already assigned to semester with id " + semesterId);
+        }
+        SemesterTest semesterTest = new SemesterTest();
+        semesterTest.setName(request.getName());
+        semesterTest.setStartDate(request.getStartDate());
+        semesterTest.setEndDate(request.getEndDate());
+        semesterTest.setMinutes(request.getMinutes());
+        semesterTest.setType(request.getType());
+        semesterTest.setSemester(semester);
+        semesterTest.setTest(test);
+        semesterTest.setCreatedBy(userId);
+        semesterTestRepository.save(semesterTest);
+        return "Test assigned to semester successfully";
+    }
 }

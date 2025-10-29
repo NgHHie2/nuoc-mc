@@ -3,12 +3,14 @@ package com.example.accountservice;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import com.example.accountservice.enums.Role;
 import com.example.accountservice.model.Account;
 import com.example.accountservice.service.AccountService;
 
+@Order(2)
 @Component
 @Slf4j
 @RequiredArgsConstructor
@@ -18,7 +20,8 @@ public class AccountSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        seedAccounts(30); // số lượng bạn muốn
+        System.out.println("second");
+        seedAccounts(30);
     }
 
     public void seedAccounts(int count) {

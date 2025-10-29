@@ -12,6 +12,7 @@ import com.example.learnservice.controller.WebSocketController;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -44,10 +45,9 @@ public class WebSocketEventListener {
                 if (users.isEmpty()) {
                     testRooms.remove(semesterTestId);
                     log.info("Test room {} removed (empty)", semesterTestId);
-                } else {
-                    // Broadcast updated list
-                    broadcastUserList(semesterTestId, users);
                 }
+                // Broadcast updated list
+                broadcastUserList(semesterTestId, users);
 
                 log.info("User {} disconnected from test room {}", userId, semesterTestId);
             }
@@ -55,6 +55,9 @@ public class WebSocketEventListener {
     }
 
     private void broadcastUserList(Long semesterTestId, Set<WebSocketController.UserStatus> users) {
+        if (users == null || users.isEmpty()) {
+            users = Collections.emptySet();
+        }
         // Count by status
         long waitingCount = users.stream()
                 .filter(u -> u.status() == WebSocketController.TestStatus.WAITING)
@@ -62,17 +65,13 @@ public class WebSocketEventListener {
         long testingCount = users.stream()
                 .filter(u -> u.status() == WebSocketController.TestStatus.TESTING)
                 .count();
-        long submittedCount = users.stream()
-                .filter(u -> u.status() == WebSocketController.TestStatus.SUBMITTED)
-                .count();
 
         WebSocketController.TestRoomUpdate update = new WebSocketController.TestRoomUpdate(
                 semesterTestId,
                 users,
                 users.size(),
                 (int) waitingCount,
-                (int) testingCount,
-                (int) submittedCount);
+                (int) testingCount);
 
         messagingTemplate.convertAndSend(
                 "/topic/test/" + semesterTestId + "/users",

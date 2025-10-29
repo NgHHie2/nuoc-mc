@@ -1,10 +1,10 @@
 services:
-  # Shared Kafka  
+  # Shared Kafka
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: kafka-shared
     ports:
-      - "9092:9092"   # host connect qua localhost:9092
+      - "9092:9092" # host connect qua localhost:9092
       - "29092:29092" # container khác connect qua kafka:29092
     environment:
       KAFKA_NODE_ID: 1
@@ -38,7 +38,7 @@ services:
       - microservice-network
 
   api-gateway:
-    image: api-gateway:latest 
+    image: api-gateway:latest
     container_name: api-gateway
     ports:
       - "8080:8080"
@@ -102,27 +102,27 @@ services:
     networks:
       - microservice-network
 
-  stats-service:
-    image: stats-service:latest
-    container_name: stats-service
-    ports:
-      - "8081:8081"
-    environment:
-      - JAVA_OPTS=-Xmx384m -Xms128m -Duser.timezone=Asia/Ho_Chi_Minh
-      - TZ=Asia/Ho_Chi_Minh
-      - SPRING_PROFILES_ACTIVE=dev
-      - EUREKA_SERVER_HOST=eureka-server
-      # Database connection cho Docker
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-stats-dev:5432/statsservicedb
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=1111
-      # Kafka connection cho Docker (nếu có)
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-    depends_on:
-      - eureka-server
-      - postgres-stats
-    networks:
-      - microservice-network
+  # stats-service:
+  #   image: stats-service:latest
+  #   container_name: stats-service
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     - JAVA_OPTS=-Xmx384m -Xms128m -Duser.timezone=Asia/Ho_Chi_Minh
+  #     - TZ=Asia/Ho_Chi_Minh
+  #     - SPRING_PROFILES_ACTIVE=dev
+  #     - EUREKA_SERVER_HOST=eureka-server
+  #     # Database connection cho Docker
+  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-stats-dev:5432/statsservicedb
+  #     - SPRING_DATASOURCE_USERNAME=postgres
+  #     - SPRING_DATASOURCE_PASSWORD=1111
+  #     # Kafka connection cho Docker (nếu có)
+  #     - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+  #   depends_on:
+  #     - eureka-server
+  #     - postgres-stats
+  #   networks:
+  #     - microservice-network
 
   # Account Service Database
   postgres-account:
@@ -154,19 +154,19 @@ services:
     networks:
       - microservice-network
 
-  postgres-stats:
-    image: postgres:15
-    container_name: postgres-stats-dev
-    ports:
-      - "5435:5432"
-    environment:
-      POSTGRES_DB: statsservicedb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1111
-    volumes:
-      - postgres_stats_data:/var/lib/postgresql/data
-    networks:
-      - microservice-network  
+  # postgres-stats:
+  #   image: postgres:15
+  #   container_name: postgres-stats-dev
+  #   ports:
+  #     - "5435:5432"
+  #   environment:
+  #     POSTGRES_DB: statsservicedb
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: 1111
+  #   volumes:
+  #     - postgres_stats_data:/var/lib/postgresql/data
+  #   networks:
+  #     - microservice-network
 
   # PgAdmin for database management
   pgadmin:
@@ -193,7 +193,7 @@ services:
     networks:
       - microservice-network
 
-  nextjs: 
+  nextjs:
     image: nextjs-app:latest
     container_name: nextjs-app
     ports:
@@ -210,7 +210,7 @@ volumes:
   kafka_shared_data:
   postgres_account_data:
   postgres_learn_data:
-  postgres_stats_data:
+  # postgres_stats_data:
   pgadmin_data:
   redis_data:
 
@@ -218,5 +218,3 @@ networks:
   microservice-network:
     driver: bridge
     name: microservice-network
-
-    

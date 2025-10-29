@@ -1,5 +1,10 @@
 package com.example.learnservice.repository;
 
+import java.util.List;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,6 +16,7 @@ import com.example.learnservice.model.Test;
 
 @Repository
 public interface TestRepository extends JpaRepository<Test, Long> {
+    List<Test> findAllByPositionId(Long positionId);
     @Query("""
                 SELECT t
                 FROM Test t
@@ -20,4 +26,5 @@ public interface TestRepository extends JpaRepository<Test, Long> {
             """)
     Optional<Test> findWithQuestionsById(@Param("id") Long id);
 
+    Page<Test> findAll(Pageable pageable);
 }

@@ -37,3 +37,5 @@ docker-compose.prod.yml
 
 logs
 uploads
+
+ffmpeg-release-amd64-static.tar.xz

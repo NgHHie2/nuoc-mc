@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.core.annotation.Order;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.EnableAsync;
 
@@ -14,6 +15,7 @@ import com.example.accountservice.service.AccountService;
 
 import lombok.extern.slf4j.Slf4j;
 
+@Order(1)
 @SpringBootApplication
 @Slf4j
 @EnableAsync
@@ -31,6 +33,7 @@ public class AccountserviceApplication implements CommandLineRunner {
 
 	@Override
 	public void run(String... args) throws Exception {
+		System.out.println("first");
 		// ✅ Warmup Kafka producer
 		try {
 			// Buộc producer connect tới broker mà không gửi message thật

@@ -36,9 +36,6 @@ public class WebSocketController {
             @Payload UserJoinMessage message,
             SimpMessageHeaderAccessor headerAccessor) {
 
-        if (resultRepository.existsBySemesterTestIdAndStudentId(semesterTestId, message.userId))
-            return;
-
         UserStatus userStatus = new UserStatus(
                 message.userId(),
                 message.fullName(),
@@ -94,7 +91,6 @@ public class WebSocketController {
     public void updateUserStatus(Long semesterTestId, Long userId, TestStatus status) {
         Set<UserStatus> users = testRooms.get(semesterTestId);
         if (users != null) {
-            // Find and update user status
             UserStatus oldStatus = users.stream()
                     .filter(u -> u.userId().equals(userId))
                     .findFirst()
@@ -150,21 +146,25 @@ public class WebSocketController {
         long testingCount = users.stream()
                 .filter(u -> u.status() == TestStatus.TESTING)
                 .count();
-        long submittedCount = users.stream()
-                .filter(u -> u.status() == TestStatus.SUBMITTED)
-                .count();
 
         TestRoomUpdate update = new TestRoomUpdate(
                 semesterTestId,
                 users,
                 users.size(),
                 (int) waitingCount,
-                (int) testingCount,
-                (int) submittedCount);
+                (int) testingCount);
 
         messagingTemplate.convertAndSend(
                 "/topic/test/" + semesterTestId + "/users",
                 update);
+    }
+
+    public void notifyTestSubmitted(Long semesterTestId, Long resultId, Long userId, Float score) {
+        TestSubmittedEvent event = new TestSubmittedEvent(semesterTestId, resultId, userId, score);
+        messagingTemplate.convertAndSend(
+                "/topic/test/" + semesterTestId + "/submitted",
+                event);
+        log.info("Test submitted notification sent for user {} in test {}", userId, semesterTestId);
     }
 
     // DTOs
@@ -195,8 +195,10 @@ public class WebSocketController {
             Set<UserStatus> users,
             int totalUsers,
             int waitingCount,
-            int testingCount,
-            int submittedCount) {
+            int testingCount) {
+    }
+
+    public record TestSubmittedEvent(Long semesterTestId, Long resultId, Long userId, Float score) {
     }
 
     public record TestOpenedEvent(Long semesterTestId, boolean opened) {
@@ -204,7 +206,6 @@ public class WebSocketController {
 
     public enum TestStatus {
         WAITING, // Đang chờ
-        TESTING, // Đang thi
-        SUBMITTED // Đã nộp
+        TESTING // Đang thi
     }
 }

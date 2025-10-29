@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.example.learnservice.dto.ResultStatusProjection;
 import com.example.learnservice.model.Result;
 
 @Repository
@@ -107,4 +108,18 @@ public interface ResultRepository extends JpaRepository<Result, Long> {
                         "WHERE (value->>'flagged')::boolean = true " +
                         "AND (SELECT id FROM result WHERE id = :resultId) IS NOT NULL", nativeQuery = true)
         Integer countFlaggedQuestions(@Param("resultId") Long resultId);
+
+        /*
+         * Check result status
+         */
+        Optional<ResultStatusProjection> findFirstBySemesterTestIdAndStudentIdOrderByCreatedAtDesc(
+                        Long semesterTestId,
+                        Long studentId);
+
+        /*
+         * Lấy danh sách student đang có result
+         */
+        // @Query("SELECT DISTINCT r.studentId FROM Result r WHERE r.semesterTest.id =
+        // :semesterTestId")
+        List<ResultStatusProjection> findAllBySemesterTestId(Long semesterTestId);
 }

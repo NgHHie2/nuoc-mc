@@ -1,12 +1,15 @@
 package com.example.learnservice.controller;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,12 +28,22 @@ import com.example.learnservice.dto.ApiResponse;
 import com.example.learnservice.dto.EndTestResponse;
 import com.example.learnservice.dto.QuestionResponse;
 import com.example.learnservice.dto.ResultDetailDTO;
+import com.example.learnservice.dto.ResultStatusProjection;
 import com.example.learnservice.dto.ResultSummaryDTO;
 import com.example.learnservice.dto.SelectAnswerRequest;
+import com.example.learnservice.dto.SemesterResponse;
+import com.example.learnservice.dto.SemesterTestAssignRequest;
+import com.example.learnservice.dto.SemesterTestUpdateRequest;
 import com.example.learnservice.dto.StartTestResponse;
+import com.example.learnservice.dto.SubmittedStudent;
+import com.example.learnservice.dto.TestStatusResponse;
+import com.example.learnservice.dto.SemesterTestCreateRequest;
 import com.example.learnservice.enums.Role;
 import com.example.learnservice.model.Result;
+import com.example.learnservice.model.Semester;
 import com.example.learnservice.model.SemesterTest;
+import com.example.learnservice.model.Test;
+import com.example.learnservice.service.SemesterService;
 import com.example.learnservice.service.SemesterTestService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -46,6 +59,9 @@ import lombok.extern.slf4j.Slf4j;
 @RestController
 @RequestMapping("/semester")
 public class SemesterTestController {
+
+    @Autowired
+    private SemesterService semesterService;
 
     @Autowired
     private SemesterTestService semesterTestService;
@@ -148,6 +164,39 @@ public class SemesterTestController {
         log.info("Student {} ended test with result {}", studentId, resultId);
 
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/test/{semesterTestId}/status")
+    @RequireRole({ Role.ADMIN, Role.TEACHER, Role.STUDENT })
+    public ResponseEntity<TestStatusResponse> getTestStatus(
+            @PathVariable Long semesterTestId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr) {
+
+        Long studentId = Long.valueOf(userIdStr);
+
+        TestStatusResponse response = new TestStatusResponse();
+        response.setSemesterTestId(semesterTestId);
+
+        Optional<ResultStatusProjection> resultOpt = semesterTestService.getTestStatus(semesterTestId, studentId);
+
+        if (resultOpt.isEmpty()) {
+            response.setStatus("NOT_STARTED");
+        } else {
+            var result = resultOpt.get();
+            response.setResultId(result.getId());
+            response.setScore(result.getScore());
+            response.setStatus(result.getSubmitDateTime() != null ? "COMPLETED" : "IN_PROGRESS");
+        }
+        log.info("status: " + response.getStatus());
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/test/{semesterTestId}/submitted-students")
+    @RequireRole({ Role.ADMIN, Role.TEACHER })
+    public ResponseEntity<List<SubmittedStudent>> getSubmittedStudents(@PathVariable Long semesterTestId) {
+        List<SubmittedStudent> submittedIds = semesterTestService.getListSubmittedStudents(semesterTestId);
+        return ResponseEntity.ok(submittedIds);
     }
 
     /**
@@ -330,5 +379,149 @@ public class SemesterTestController {
         }
 
         return ResponseEntity.ok(dto);
+    }
+
+    /*
+     * Lấy danh sách thông tin bài thi của một khóa học
+     */
+    @GetMapping("/{semesterId}/exams")
+    public ResponseEntity<List<SemesterTest>> getTestExams(@PathVariable Long semesterId) {
+        return ResponseEntity.ok(semesterTestService.getExamTests(semesterId));
+    }
+
+    /*
+     * SemesterTest Controller sử dụng để tạo các API liên quan đến bài kiểm tra
+     * trong kỳ học
+     */
+
+    /*
+     * Thứ tự thực hiện khi ấn confirm ở phia FE:
+     * 1. Tạo bài kiểm tra, nhận về testId
+     * 2. Tạo câu hỏi, nhận về ds questionIds
+     * 3. Lưu câu hỏi vào bài kiểm tra với testID và ds questionIds
+     */
+    /*
+     * Tạo bài kiểm tra
+     */
+    @PostMapping("/{semesterId}/tests")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
+    public ResponseEntity<Test> createTest(@PathVariable Long semesterId,
+            @Valid @RequestBody SemesterTestCreateRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
+        }
+        return ResponseEntity.ok(semesterTestService.createTest(semesterId, request, userId));
+    }
+
+    /*
+     * Lấy tất cả bài kiểm tra trong kỳ học
+     */
+    @GetMapping("/{semesterId}/tests")
+    public ResponseEntity<List<SemesterTest>> getAllTestsInSemester(@PathVariable Long semesterId) {
+        return ResponseEntity.ok(semesterTestService.getAllTestsInSemester(semesterId));
+    }
+
+    /*
+     * Xoá bài kiểm tra khỏi kỳ học
+     */
+    @DeleteMapping("/{semesterId}/tests/{testId}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
+    public String deleteTestFromSemester(@PathVariable Long semesterId,
+            @PathVariable Long testId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
+        }
+        semesterTestService.deleteTestFromSemester(semesterId, testId);
+        return "Test deleted successfully from semester";
+    }
+
+    /*
+     * Lấy tất cả bài kiểm tra có position phù hợp mà chưa được thêm vào trong kỳ
+     * học
+     */
+    @GetMapping("/{semesterId}/tests/{positionId}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
+    public ResponseEntity<List<Test>> getAvailableTestsWithPosition(@PathVariable Long semesterId,
+            @PathVariable Long positionId,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
+        }
+        return ResponseEntity.ok(semesterTestService.getAvailableTestsWithPosition(semesterId, positionId));
+    }
+
+    /*
+     * CHIA LÀM 2 PHẦN: CHỈ CẬP NHẬT THÔNG TIN (Sửa SemesterTest) VÀ CẬP NHẬT CÂU
+     * HỎI (Sửa/Xóa TestQuestion)
+     * Cập nhật thông tin bài test
+     * (Chỉ cập nhật SemesterTest, không cập nhật Test)
+     * (Thay đổi tên bài test)
+     */
+    @PutMapping("/{semesterId}/tests/{testId}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
+    public ResponseEntity<SemesterTest> updateSemesterTestInfo(@PathVariable Long semesterId,
+            @PathVariable Long testId,
+            @Valid @RequestBody SemesterTestUpdateRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
+        }
+        return ResponseEntity.ok(semesterTestService.updateSemesterTestInfo(semesterId, testId, userId, request));
+    }
+
+    /*
+     * Lấy ra danh sách các Semester sử dụng 1 Test (Không tính semester đang sử
+     * dụng)
+     */
+    @GetMapping("/tests/{testId}/semesters/{semesterId}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
+    public ResponseEntity<List<SemesterResponse>> getSemestersUsingTest(@PathVariable Long testId,
+            @PathVariable Long semesterId) {
+        return ResponseEntity.ok(semesterTestService.getSemestersUsingTest(testId, semesterId));
+    }
+
+    /*
+     * Lấy thông tin 1 bài kiểm tra trong kỳ học
+     */
+    @GetMapping("/{semesterId}/tests/{testId}/data")
+    public ResponseEntity<SemesterTest> getTestInSemester(@PathVariable Long semesterId,
+            @PathVariable Long testId) {
+        return ResponseEntity.ok(semesterTestService.getTestInSemester(semesterId, testId));
+    }
+
+    /*
+     * Gán bài kiểm tra vào kỳ học
+     */
+    @PostMapping("/{semesterId}/tests/{testId}")
+    @RequireRole({ Role.TEACHER, Role.ADMIN })
+    public String assignTestToSemester(@PathVariable Long semesterId,
+            @PathVariable Long testId,
+            @Valid @RequestBody SemesterTestAssignRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
+
+        Long userId = Long.valueOf(userIdStr);
+        Role userRole = Role.valueOf(userRoleStr);
+        if (userRole.equals(Role.TEACHER) && !semesterService.checkSemesterAccessWithTeacher(semesterId, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a teacher in this course!");
+        }
+        semesterTestService.assignTestToSemester(semesterId, testId, userId, request);
+        return "Test assigned successfully to semester";
     }
 }
