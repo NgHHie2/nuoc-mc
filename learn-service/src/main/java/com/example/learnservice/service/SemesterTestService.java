@@ -29,6 +29,7 @@ import com.example.learnservice.model.Question;
 import com.example.learnservice.model.Result;
 import com.example.learnservice.model.Semester;
 import com.example.learnservice.model.SemesterAccount;
+import com.example.learnservice.model.SemesterTeacher;
 import com.example.learnservice.model.SemesterTest;
 import com.example.learnservice.model.Test;
 import com.example.learnservice.model.TestQuestion;
@@ -36,6 +37,7 @@ import com.example.learnservice.repository.QuestionRepository;
 import com.example.learnservice.repository.ResultRepository;
 import com.example.learnservice.repository.SemesterAccountRepository;
 import com.example.learnservice.repository.SemesterRepository;
+import com.example.learnservice.repository.SemesterTeacherRepository;
 import com.example.learnservice.repository.SemeterTestRepository;
 import com.example.learnservice.repository.TestRepository;
 import com.example.learnservice.util.ValidateUtil;
@@ -56,6 +58,9 @@ public class SemesterTestService {
 
     @Autowired
     private SemesterAccountRepository semesterAccountRepository;
+
+    @Autowired
+    private SemesterTeacherRepository semesterTeacherRepository;
 
     @Autowired
     private ResultRepository resultRepository;
@@ -506,6 +511,17 @@ public class SemesterTestService {
                 .findBySemesterIdAndAccountId(semesterTest.getSemester().getId(), studentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"));
         if (!semesterTest.getTest().getPosition().getId().equals(semesterAccount.getPosition().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return semesterTest;
+    }
+
+    public SemesterTest validateAccessTestWithTeacher(Long semesterTestId, Long teacherId) {
+        SemesterTest semesterTest = semesterTestRepository.findById(semesterTestId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Test not found"));
+        boolean existing = semesterTeacherRepository
+                .existsBySemesterIdAndTeacherId(semesterTest.getSemester().getId(), teacherId);
+        if (!existing) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return semesterTest;

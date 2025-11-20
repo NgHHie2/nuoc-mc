@@ -54,15 +54,18 @@ class AuthControllerDbTest {
 
     private Account testAccount;
 
+    /*
+     * Hàm xử lý trước mỗi test case:
+     * - Thiết lập MockMvc
+     * - Xóa dữ liệu cũ trong database
+     * - Tạo và lưu tài khoản test vào database
+     */
     @BeforeEach
     void setUp() {
-        // Setup MockMvc manually
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
 
-        // Xóa dữ liệu cũ
         accountRepository.deleteAll();
 
-        // Tạo test account với password đã mã hóa
         testAccount = new Account();
         testAccount.setUsername("testuser");
         testAccount.setPassword(passwordEncoder.encode("password123"));
@@ -73,18 +76,30 @@ class AuthControllerDbTest {
         testAccount.setRole(Role.STUDENT);
         testAccount.setVisible(1);
 
-        // Lưu vào database
         testAccount = accountRepository.save(testAccount);
     }
 
+    /*
+     * Danh sach các test case:
+     * 1. Đăng nhập thành công với tài khoản và mật khẩu hợp lệ
+     * 2. Đăng nhập thất bại do sai mật khẩu
+     * 3. Đăng nhập thất bại do tài khoản không tồn tại
+     * 4. Đăng nhập thất bại do tài khoản đã bị xóa (Soft Delete)
+     */
+
+    /*
+     * 1. Đăng nhập thành công với tài khoản và mật khẩu hợp lệ
+     * - Given: Tài khoản tồn tại trong db
+     * - When: Gửi request đăng nhập với username và password đúng
+     * - Then: Trả về thông tin user và jwt trong cookie
+     * - Expected: Status 200, userId và username khớp với tài khoản, message tương ứng, tồn tại jwt
+     */
     @Test
     void login_WithH2Database_Success() throws Exception {
-        // Given
         AccountLogin loginRequest = new AccountLogin();
         loginRequest.setUsername("testuser");
         loginRequest.setPassword("password123");
 
-        // When & Then
         mockMvc.perform(post("/account/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(loginRequest)))
@@ -95,14 +110,19 @@ class AuthControllerDbTest {
                 .andExpect(cookie().exists("jwt"));
     }
 
+    /*
+     * 2. Đăng nhập thất bại do sai mật khẩu
+     * - Given: Tài khoản tồn tại trong db
+     * - When: Gửi request đăng nhập với username đúng nhưng password sai
+     * - Then: Trả về lỗi Unauthorized
+     * - Expected: Status 401, message "Invalid username or password"
+     */
     @Test
     void login_WithH2Database_WrongPassword() throws Exception {
-        // Given
         AccountLogin loginRequest = new AccountLogin();
         loginRequest.setUsername("testuser");
         loginRequest.setPassword("wrongpassword");
 
-        // When & Then
         mockMvc.perform(post("/account/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(loginRequest)))
@@ -110,14 +130,19 @@ class AuthControllerDbTest {
                 .andExpect(jsonPath("$.error").value("Invalid username or password"));
     }
 
+    /*
+     * 3. Đăng nhập thất bại do tài khoản không tồn tại
+     * - Given: Tài khoản không tồn tại trong db
+     * - When: Gửi request đăng nhập với username không tồn tại
+     * - Then: Trả về lỗi Unauthorized
+     * - Expected: Status 401, message "Invalid username or password"
+     */
     @Test
     void login_WithH2Database_UserNotFound() throws Exception {
-        // Given
         AccountLogin loginRequest = new AccountLogin();
         loginRequest.setUsername("nonexistent");
         loginRequest.setPassword("password123");
 
-        // When & Then
         mockMvc.perform(post("/account/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(loginRequest)))
@@ -125,9 +150,15 @@ class AuthControllerDbTest {
                 .andExpect(jsonPath("$.error").value("Invalid username or password"));
     }
 
+    /*
+     * 4. Đăng nhập thất bại do tài khoản đã bị xóa (Soft Delete)
+     * - Given: Tài khoản đã bị xóa (visible = 0)
+     * - When: Gửi request đăng nhập với username và password đúng
+     * - Then: Trả về lỗi Unauthorized
+     * - Expected: Status 401, message "Invalid username or password"
+     */
     @Test
     void login_WithH2Database_DeletedUser() throws Exception {
-        // Given - Xóa user (soft delete)
         testAccount.setVisible(0);
         accountRepository.save(testAccount);
 
@@ -135,7 +166,6 @@ class AuthControllerDbTest {
         loginRequest.setUsername("testuser");
         loginRequest.setPassword("password123");
 
-        // When & Then
         mockMvc.perform(post("/account/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(loginRequest)))

@@ -16,5 +16,5 @@ public interface AccountPositionRepository extends JpaRepository<AccountPosition
 
     boolean existsByAccountAndPosition(Account account, Position position);
 
-    boolean deleteByAccountAndPosition(Account account, Position position);
+    long deleteByAccountAndPosition(Account account, Position position);
 }

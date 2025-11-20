@@ -79,10 +79,13 @@ public class SemesterTestController {
             @RequestHeader(value = "X-User-Id", required = false) String userIdStr,
             @RequestHeader(value = "X-User-Role", required = false) String userRoleStr) {
 
-        Long studentId = Long.valueOf(userIdStr);
+        Long userId = Long.valueOf(userIdStr);
         Role userRole = Role.valueOf(userRoleStr);
         if (userRole.equals(Role.STUDENT)) {
-            SemesterTest semesterTest = semesterTestService.validateAccessTest(semesterTestId, studentId);
+            SemesterTest semesterTest = semesterTestService.validateAccessTest(semesterTestId, userId);
+            return ResponseEntity.ok(semesterTest);
+        } else if (userRole.equals(Role.TEACHER)) {
+            SemesterTest semesterTest = semesterTestService.validateAccessTestWithTeacher(semesterTestId, userId);
             return ResponseEntity.ok(semesterTest);
         }
         SemesterTest semesterTest = semesterTestService.getSemesterTestById(semesterTestId);
@@ -102,6 +105,9 @@ public class SemesterTestController {
         Long userId = Long.valueOf(userIdStr);
         Role userRole = Role.valueOf(userRoleStr);
 
+        if (userRole.equals(Role.TEACHER)) {
+            semesterTestService.validateAccessTestWithTeacher(semesterTestId, userId);
+        }
         semesterTestService.openTest(semesterTestId, userId, userRole);
 
         ApiResponse response = new ApiResponse();
@@ -357,8 +363,10 @@ public class SemesterTestController {
         Result result = semesterTestService.getResultById(resultId);
 
         // Kiểm tra quyền: STUDENT chỉ xem được result của mình
-        if (userRole == Role.STUDENT) {
+        if (userRole.equals(Role.STUDENT)) {
             semesterTestService.validateStudentAccessLight(result.getId(), userId);
+        } else if (userRole.equals(Role.TEACHER)) {
+            semesterTestService.validateAccessTestWithTeacher(result.getSemesterTest().getSemester().getId(), userId);
         }
 
         // Map sang DTO
