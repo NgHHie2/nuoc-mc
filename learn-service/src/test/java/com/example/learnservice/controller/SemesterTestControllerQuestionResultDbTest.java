@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+import com.example.learnservice.BaseIntegrationTest;
 import com.example.learnservice.config.TestConfig;
 
 import com.example.learnservice.dto.SelectAnswerRequest;
@@ -52,12 +53,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * Test các API: getSubmittedStudents, getQuestion, selectAnswer, flagQuestion,
  * getMyResults, getResultDetail, getTestExams
  */
-@SpringBootTest
-@Import(TestConfig.class)
-@ActiveProfiles("test")
-@Transactional
-class SemesterTestControllerQuestionResultDbTest {
+class SemesterTestControllerQuestionResultDbTest extends BaseIntegrationTest {
 
+    @Autowired
     private MockMvc mockMvc;
 
     @Autowired
@@ -107,7 +105,6 @@ class SemesterTestControllerQuestionResultDbTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
 
         // Clear all data
         resultRepository.deleteAll();

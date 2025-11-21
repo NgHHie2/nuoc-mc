@@ -66,7 +66,7 @@ public class FileUtil {
     @Value("${temp.dir:D:/temp}")
     private String tempRepo;
 
-    @Value("${file.encryption.key}")
+    @Value("${file.encryption.key:MySecretKey12345}")
     private String encryptionKey;
 
     @Value("${ffmpeg.path:ffmpeg}")

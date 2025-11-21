@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
+import com.example.learnservice.BaseIntegrationTest;
 import com.example.learnservice.config.TestConfig;
 
 import com.example.learnservice.enums.TestType;
@@ -48,12 +49,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * Test các API cơ bản: getSemesterTestById, openTest, startTest, endTest,
  * getTestStatus
  */
-@SpringBootTest
-@Import(TestConfig.class)
-@ActiveProfiles("test")
-@Transactional
-class SemesterTestControllerBasicDbTest {
+class SemesterTestControllerBasicDbTest extends BaseIntegrationTest {
 
+    @Autowired
     private MockMvc mockMvc;
 
     @Autowired
@@ -107,8 +105,6 @@ class SemesterTestControllerBasicDbTest {
      */
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
-
         // Clear all data
         resultRepository.deleteAll();
         testQuestionRepository.deleteAll();
@@ -341,6 +337,7 @@ class SemesterTestControllerBasicDbTest {
         semesterTest.setOpen(true);
         semesterTestRepository.save(semesterTest);
 
+        System.out.println("Testing endpoint: /semester/test/" + semesterTest.getId() + "/start");
         mockMvc.perform(post("/semester/test/" + semesterTest.getId() + "/start")
                 .header("X-User-Id", studentId.toString())
                 .header("X-User-Role", "STUDENT"))

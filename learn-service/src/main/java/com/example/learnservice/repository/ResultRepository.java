@@ -18,7 +18,7 @@ public interface ResultRepository extends JpaRepository<Result, Long> {
         /**
          * Lấy danh sách results của một user trong một semester test
          */
-        @Query("SELECT r.id, r.studentId FROM Result r WHERE r.semesterTest.id = :semesterTestId AND r.studentId = :userId")
+        @Query("SELECT r FROM Result r WHERE r.semesterTest.id = :semesterTestId AND r.studentId = :userId")
         List<Result> findBySemesterTestIdAndStudentId(@Param("semesterTestId") Long semesterTestId,
                         @Param("userId") Long userId);
 
