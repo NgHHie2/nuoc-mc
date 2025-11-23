@@ -170,6 +170,7 @@ class SemesterTestControllerQuestionResultDbTest extends BaseIntegrationTest {
 
         // Create Result for student
         studentResult = createResultForStudent(studentId);
+        System.out.println("result: " + studentResult);
     }
 
     private Question createQuestionWithAnswers(String questionText, String[] answerTexts, boolean[] correctAnswers) {
@@ -420,8 +421,10 @@ class SemesterTestControllerQuestionResultDbTest extends BaseIntegrationTest {
 
         // Verify in database
         Result updated = resultRepository.findById(studentResult.getId()).get();
+        System.out.println("final: " + updated);
         JsonNode studentAnswers = updated.getStudentAnswers();
         JsonNode answer1 = studentAnswers.get("1");
+        System.out.println("dapan: " + answer1);
         assert answer1.get("selectedAnswers").get(0).asInt() == 2;
     }
 

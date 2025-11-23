@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
@@ -43,6 +44,8 @@ import com.example.learnservice.repository.TestQuestionRepository;
 import com.example.learnservice.repository.TestRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 
 /**
  * Integration test cho SemesterTestController với H2 database
@@ -135,9 +138,10 @@ class SemesterTestControllerBasicDbTest extends BaseIntegrationTest {
         test.setPosition(position);
         test.setVisible(true);
         test.setCreatedBy(adminId);
+        test.setTestQuestions(new ArrayList<>());
         test = testRepository.save(test);
 
-        // Create Questions with Answers
+        // Create Questions + add to Test
         question1 = createQuestionWithAnswers("What is 2 + 2?",
                 new String[] { "3", "4", "5" },
                 new boolean[] { false, true, false });
@@ -146,9 +150,11 @@ class SemesterTestControllerBasicDbTest extends BaseIntegrationTest {
                 new String[] { "London", "Paris", "Berlin" },
                 new boolean[] { false, true, false });
 
-        // Add questions to test
         addQuestionToTest(test, question1);
         addQuestionToTest(test, question2);
+
+        // Save the updated test (with TestQuestions added)
+        test = testRepository.save(test);
 
         // Create SemesterTest
         semesterTest = new SemesterTest();
@@ -172,7 +178,9 @@ class SemesterTestControllerBasicDbTest extends BaseIntegrationTest {
         semesterAccountRepository.save(semesterAccount);
     }
 
-    private Question createQuestionWithAnswers(String questionText, String[] answerTexts, boolean[] correctAnswers) {
+    private Question createQuestionWithAnswers(
+            String questionText, String[] answerTexts, boolean[] correctAnswers) {
+
         Question question = new Question();
         question.setText(questionText);
         question.setCreatedBy(adminId);
@@ -194,10 +202,12 @@ class SemesterTestControllerBasicDbTest extends BaseIntegrationTest {
 
     private void addQuestionToTest(com.example.learnservice.model.Test test, Question question) {
         TestQuestion testQuestion = new TestQuestion();
-        testQuestion.setTest(test);
         testQuestion.setQuestion(question);
         testQuestion.setCreatedBy(adminId);
-        testQuestionRepository.save(testQuestion);
+
+        // Set 2 chiều
+        testQuestion.setTest(test);
+        test.getTestQuestions().add(testQuestion);
     }
 
     /*
@@ -336,11 +346,12 @@ class SemesterTestControllerBasicDbTest extends BaseIntegrationTest {
         // Open the test first
         semesterTest.setOpen(true);
         semesterTestRepository.save(semesterTest);
-
-        System.out.println("Testing endpoint: /semester/test/" + semesterTest.getId() + "/start");
+        System.out.println("path: " + "/semester/test/" + semesterTest.getId() + "/start");
+        System.out.println("testquestion: " + test);
         mockMvc.perform(post("/semester/test/" + semesterTest.getId() + "/start")
                 .header("X-User-Id", studentId.toString())
                 .header("X-User-Role", "STUDENT"))
+                .andDo(print()) // in request + response + exception nếu có
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.resultId").exists())

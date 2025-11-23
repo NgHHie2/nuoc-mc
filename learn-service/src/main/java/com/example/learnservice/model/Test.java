@@ -19,9 +19,11 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import lombok.Data;
+import lombok.ToString;
 
 @Entity
 @Data
+@ToString(exclude = "testQuestions")
 public class Test {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

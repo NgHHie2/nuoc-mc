@@ -59,7 +59,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleNullPointer(NullPointerException ex) {
         Map<String, Object> error = new HashMap<>();
         error.put("error", "Resource Not Found");
-        error.put("message", "The requested resource does not exist");
+        error.put("message", ex.getMessage());
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
 
